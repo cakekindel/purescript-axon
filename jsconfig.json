@@ -14,10 +14,6 @@
   },
   "include": [
     "./scripts/*.js",
-    "ui-serve/**/*.js",
-    "api/**/*.js",
-    "ui/**/*.js",
-    "aws/**/*.js",
-    "logging/**/*.js"
+    "src/**/*.js"
   ]
 }

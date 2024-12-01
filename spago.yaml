@@ -1,9 +1,22 @@
 package:
   name: tower
   dependencies:
+    - aff
+    - argonaut-codecs
+    - argonaut-core
     - console
     - effect
+    - ezfetch
+    - maybe
+    - node-net
+    - node-streams
+    - nullable
     - prelude
+    - strings
+    - transformers
+    - tuples
+    - url-immutable
+    - web-streams
   test:
     main: Test.Main
     dependencies: []
