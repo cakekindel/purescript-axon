@@ -8,9 +8,11 @@ import Data.Show.Generic (genericShow)
 import Data.String as String
 
 data Method = GET | POST | PUT | PATCH | DELETE | OPTIONS | TRACE | CONNECT
+
 derive instance Generic Method _
 derive instance Eq Method
-instance Show Method where show = genericShow
+instance Show Method where
+  show = genericShow
 
 methodToString :: Method -> String
 methodToString GET = "GET"

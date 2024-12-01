@@ -2,6 +2,18 @@ module Axon.Request.Parts.Class (class RequestParts, extractRequestParts, module
 
 import Prelude
 
+import Axon.Request (Request)
+import Axon.Request as Request
+import Axon.Request.Method (Method)
+import Axon.Request.Method as Method
+import Axon.Request.Parts.Body (Json(..), Stream(..))
+import Axon.Request.Parts.Body (Json(..), Stream(..)) as Parts.Body
+import Axon.Request.Parts.Method (Connect, Delete, Get, Options, Patch, Post, Put, Trace)
+import Axon.Request.Parts.Method (Get(..), Post(..), Put(..), Patch(..), Delete(..), Trace(..), Options(..), Connect(..)) as Parts.Method
+import Axon.Request.Parts.Path (Path(..)) as Path.Parts
+import Axon.Request.Parts.Path (class DiscardTupledUnits, class PathParts, Path(..), discardTupledUnits, extractPathParts)
+import Axon.Response (Response)
+import Axon.Response as Response
 import Control.Alternative (guard)
 import Control.Monad.Except (ExceptT(..), runExceptT)
 import Control.Monad.Maybe.Trans (MaybeT(..), runMaybeT)
@@ -17,18 +29,6 @@ import Data.URL as URL
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Node.Buffer (Buffer)
-import Axon.Request (Request)
-import Axon.Request as Request
-import Axon.Request.Method (Method)
-import Axon.Request.Method as Method
-import Axon.Request.Parts.Body (Json(..), Stream(..))
-import Axon.Request.Parts.Body (Json(..), Stream(..)) as Parts.Body
-import Axon.Request.Parts.Method (Connect, Delete, Get, Options, Patch, Post, Put, Trace)
-import Axon.Request.Parts.Method (Get(..), Post(..), Put(..), Patch(..), Delete(..), Trace(..), Options(..), Connect(..)) as Parts.Method
-import Axon.Request.Parts.Path (Path(..)) as Path.Parts
-import Axon.Request.Parts.Path (class PathParts, Path(..), extractPathParts)
-import Axon.Response (Response)
-import Axon.Response as Response
 
 extractMethod :: forall @t a. RequestParts a => Newtype t a => Method -> Request -> Aff (Either Response (Maybe t))
 extractMethod method r =
@@ -54,13 +54,19 @@ instance RequestParts Request where
 instance RequestParts String where
   extractRequestParts r =
     Request.bodyString r
-    <#> lmap (const $ Response.fromStatus 500)
-    # ExceptT
-    # lift
-    # runMaybeT
-    # runExceptT
+      <#> lmap (const $ Response.fromStatus 500)
+      # ExceptT
+      # lift
+      # runMaybeT
+      # runExceptT
 
-instance PathParts a b => RequestParts (Path a b) where
+instance RequestParts (Either Request.BodyStringError String) where
+  extractRequestParts r =
+    Request.bodyString r
+      <#> Just
+      <#> Right
+
+instance (PathParts a b, DiscardTupledUnits b c) => RequestParts (Path a c) where
   extractRequestParts r =
     let
       segments = Request.url r # URL.path # case _ of
@@ -75,6 +81,7 @@ instance PathParts a b => RequestParts (Path a b) where
         # Right
         # MaybeT
         >>= ensureConsumed
+        <#> discardTupledUnits
         <#> Path
         # runMaybeT
         # pure

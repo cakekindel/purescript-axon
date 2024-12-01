@@ -20,15 +20,15 @@ export const headers = r => () => r.headers
 
 /** @type {(r: ReadableStream<Uint8Array>) => () => Stream.Readable} */
 export const readableFromWeb = r => () => {
-  const reader = r.getReader();
+  const reader = r.getReader()
   return new Stream.Readable({
-    read: function() {
-      (async () => {
+    read: function () {
+      ;(async () => {
         /** @type {ReadableStreamReadResult<Uint8Array> | undefined} */
-        let res = undefined;
+        let res = undefined
         try {
           res = await reader.read()
-        } catch(e) {
+        } catch (e) {
           if (typeof e === 'undefined' || e instanceof Error) {
             this.destroy(e)
             return
@@ -37,8 +37,8 @@ export const readableFromWeb = r => () => {
           }
         }
 
-        if (res.value) this.push(res.value);
-        if (res.done) this.push(null);
+        if (res.value) this.push(res.value)
+        if (res.done) this.push(null)
       })()
     },
   })

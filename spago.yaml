@@ -19,7 +19,9 @@ package:
     - web-streams
   test:
     main: Test.Main
-    dependencies: []
+    dependencies:
+      - spec
+      - spec-node
 workspace:
   packageSet:
     registry: 61.2.0

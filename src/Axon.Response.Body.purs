@@ -16,6 +16,13 @@ data Body
   | BodyFormData HTTP.RawFormData
   | BodyReadable (Stream.Readable ())
 
+instance Show Body where
+  show BodyEmpty = "BodyEmpty"
+  show (BodyString s) = "BodyString " <> show s
+  show (BodyBuffer _) = "BodyBuffer _"
+  show (BodyFormData _) = "BodyFormData _"
+  show (BodyReadable _) = "BodyReadable _"
+
 formBody :: HTTP.Form -> Effect Body
 formBody f = HTTP.Form.toRawFormData f <#> BodyFormData
 

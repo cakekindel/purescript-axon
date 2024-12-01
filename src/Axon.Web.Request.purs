@@ -1,10 +1,10 @@
 module Axon.Web.Request where
 
 import Data.ArrayBuffer.Types (Uint8Array)
+import Axon.Web.Headers (WebHeaders)
 import Data.Nullable (Nullable)
 import Effect (Effect)
 import Node.Stream as Stream
-import Axon.Request.Web (WebHeaders)
 import Web.Streams.ReadableStream (ReadableStream)
 
 foreign import data WebRequest :: Type

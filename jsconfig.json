@@ -12,8 +12,5 @@
     "noEmit": true,
     "strict": true
   },
-  "include": [
-    "./scripts/*.js",
-    "src/**/*.js"
-  ]
+  "include": ["./scripts/*.js", "src/**/*.js"]
 }

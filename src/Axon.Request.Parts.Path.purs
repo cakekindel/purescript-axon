@@ -4,26 +4,46 @@ import Prelude
 
 import Control.Alternative (guard)
 import Data.Array as Array
+import Data.Generic.Rep (class Generic)
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Show.Generic (genericShow)
 import Data.Symbol (class IsSymbol, reflectSymbol)
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.URL (URL)
 import Type.Prelude (Proxy(..))
 
-newtype Path :: Type -> Type -> Type
-newtype Path a b = Path b
+data Path :: forall k. k -> Type -> Type
+data Path a b = Path b
 
-data Sep :: Type -> Type -> Type
+derive instance Generic (Path a b) _
+derive instance Eq b => Eq (Path a b)
+instance Show b => Show (Path a b) where
+  show = genericShow
+
+data Sep :: forall ka kb. ka -> kb -> Type
 data Sep a b
 
 data IgnoreRest :: Type
 data IgnoreRest
 
-infixl 9 type Sep as /
+infixr 9 type Sep as /
 infixl 9 type IgnoreRest as ...
 
-class PathParts :: forall a. a -> Type -> Constraint
+class DiscardTupledUnits :: Type -> Type -> Constraint
+class DiscardTupledUnits a b | a -> b where
+  discardTupledUnits :: a -> b
+
+instance (DiscardTupledUnits a b) => DiscardTupledUnits (Unit /\ a) b where
+  discardTupledUnits (_ /\ a) = discardTupledUnits a
+else instance (DiscardTupledUnits a b) => DiscardTupledUnits (a /\ Unit) b where
+  discardTupledUnits (a /\ _) = discardTupledUnits a
+else instance (DiscardTupledUnits aa ab, DiscardTupledUnits ba bb) => DiscardTupledUnits (aa /\ ba) (ab /\ bb) where
+  discardTupledUnits (a /\ b) = discardTupledUnits a /\ discardTupledUnits b
+else instance DiscardTupledUnits a a where
+  discardTupledUnits = identity
+
+class PathParts :: forall k. k -> Type -> Constraint
 class PathParts a b | a -> b where
   extractPathParts :: URL -> Array String -> Maybe (Array String /\ b)
 
@@ -32,7 +52,7 @@ instance (PathParts aa ab, PathParts ba bb) => PathParts (aa / ba) (ab /\ bb) wh
     segments' /\ ab <- extractPathParts @aa u segments
     segments'' /\ bb <- extractPathParts @ba u segments'
     pure $ segments'' /\ ab /\ bb
-else instance PathParts (...) Unit where
+else instance PathParts IgnoreRest Unit where
   extractPathParts _ _ = Just $ [] /\ unit
 else instance PathParts String String where
   extractPathParts _ segments = do
