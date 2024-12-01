@@ -1,4 +1,4 @@
-module Tower.Response (Response, response, body, status, headers, withHeader, withBody, withStatus, fromStatus, ok, module Body) where
+module Axon.Response (Response, response, body, status, headers, withHeader, withBody, withStatus, fromStatus, ok, module Body) where
 
 import Prelude
 
@@ -7,8 +7,8 @@ import Data.Map (Map)
 import Data.Map as Map
 import Data.String.Lower (StringLower)
 import Data.String.Lower as String.Lower
-import Tower.Response.Body (Body(..))
-import Tower.Response.Body (Body(..), formBody) as Body
+import Axon.Response.Body (Body(..))
+import Axon.Response.Body (Body(..), formBody) as Body
 
 data Response = Response {body :: Body, headers :: Map StringLower String, status :: Int}
 

@@ -1,4 +1,4 @@
-module Tower.Web.Headers where
+module Axon.Web.Headers where
 
 import Data.Tuple.Nested (type (/\))
 import Effect (Effect)

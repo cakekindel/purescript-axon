@@ -1,4 +1,4 @@
-module Tower.Request (Request, BodyReadableError(..), BodyStringError(..), BodyJSONError(..), BodyBufferError(..), bodyReadable, bodyString, bodyJSON, bodyBuffer, headers, method, address, url, contentType, accept, contentLength, lookupHeader) where
+module Axon.Request (Request, BodyReadableError(..), BodyStringError(..), BodyJSONError(..), BodyBufferError(..), bodyReadable, bodyString, bodyJSON, bodyBuffer, headers, method, address, url, contentType, accept, contentLength, lookupHeader) where
 
 import Prelude
 
@@ -35,7 +35,7 @@ import Node.Encoding (Encoding(..))
 import Node.Net.Types (IPv4, IPv6, SocketAddress)
 import Node.Stream as Stream
 import Node.Stream.Aff as Stream.Aff
-import Tower.Request.Method (Method)
+import Axon.Request.Method (Method)
 
 data BodyReadableError
   = BodyReadableErrorHasBeenConsumed

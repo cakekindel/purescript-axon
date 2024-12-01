@@ -1,4 +1,4 @@
-module Tower.Request.Parts.Method where
+module Axon.Request.Parts.Method where
 
 import Prelude
 

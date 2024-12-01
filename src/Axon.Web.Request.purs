@@ -1,10 +1,10 @@
-module Tower.Web.Request where
+module Axon.Web.Request where
 
 import Data.ArrayBuffer.Types (Uint8Array)
 import Data.Nullable (Nullable)
 import Effect (Effect)
 import Node.Stream as Stream
-import Tower.Request.Web (WebHeaders)
+import Axon.Request.Web (WebHeaders)
 import Web.Streams.ReadableStream (ReadableStream)
 
 foreign import data WebRequest :: Type

@@ -1,4 +1,4 @@
-module Tower.Response.Body where
+module Axon.Response.Body where
 
 import Prelude
 

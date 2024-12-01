@@ -1,4 +1,4 @@
-module Tower.Request.Parts.Class (class RequestParts, extractRequestParts, module Parts.Method, module Parts.Body, module Path.Parts) where
+module Axon.Request.Parts.Class (class RequestParts, extractRequestParts, module Parts.Method, module Parts.Body, module Path.Parts) where
 
 import Prelude
 
@@ -17,18 +17,18 @@ import Data.URL as URL
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Node.Buffer (Buffer)
-import Tower.Request (Request)
-import Tower.Request as Request
-import Tower.Request.Method (Method)
-import Tower.Request.Method as Method
-import Tower.Request.Parts.Body (Json(..), Stream(..))
-import Tower.Request.Parts.Body (Json(..), Stream(..)) as Parts.Body
-import Tower.Request.Parts.Method (Connect, Delete, Get, Options, Patch, Post, Put, Trace)
-import Tower.Request.Parts.Method (Get(..), Post(..), Put(..), Patch(..), Delete(..), Trace(..), Options(..), Connect(..)) as Parts.Method
-import Tower.Request.Parts.Path (Path(..)) as Path.Parts
-import Tower.Request.Parts.Path (class PathParts, Path(..), extractPathParts)
-import Tower.Response (Response)
-import Tower.Response as Response
+import Axon.Request (Request)
+import Axon.Request as Request
+import Axon.Request.Method (Method)
+import Axon.Request.Method as Method
+import Axon.Request.Parts.Body (Json(..), Stream(..))
+import Axon.Request.Parts.Body (Json(..), Stream(..)) as Parts.Body
+import Axon.Request.Parts.Method (Connect, Delete, Get, Options, Patch, Post, Put, Trace)
+import Axon.Request.Parts.Method (Get(..), Post(..), Put(..), Patch(..), Delete(..), Trace(..), Options(..), Connect(..)) as Parts.Method
+import Axon.Request.Parts.Path (Path(..)) as Path.Parts
+import Axon.Request.Parts.Path (class PathParts, Path(..), extractPathParts)
+import Axon.Response (Response)
+import Axon.Response as Response
 
 extractMethod :: forall @t a. RequestParts a => Newtype t a => Method -> Request -> Aff (Either Response (Maybe t))
 extractMethod method r =

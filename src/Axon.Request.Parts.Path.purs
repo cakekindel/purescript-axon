@@ -1,4 +1,4 @@
-module Tower.Request.Parts.Path where
+module Axon.Request.Parts.Path where
 
 import Prelude
 
