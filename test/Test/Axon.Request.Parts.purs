@@ -6,7 +6,7 @@ import Axon.Request (Request)
 import Axon.Request as Request
 import Axon.Request.Method (Method(..))
 import Axon.Request.Parts.Class (Json(..), Patch(..), Path(..), Post(..), extractRequestParts)
-import Axon.Request.Parts.Path (type (...), type (/), IgnoreRest)
+import Axon.Request.Parts.Path (type (/), IgnoreRest)
 import Control.Monad.Error.Class (liftEither, liftMaybe)
 import Data.Bifunctor (lmap)
 import Data.Either (Either(..))
