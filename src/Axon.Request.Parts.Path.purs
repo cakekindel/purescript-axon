@@ -38,7 +38,11 @@ instance (DiscardTupledUnits a b) => DiscardTupledUnits (Unit /\ a) b where
   discardTupledUnits (_ /\ a) = discardTupledUnits a
 else instance (DiscardTupledUnits a b) => DiscardTupledUnits (a /\ Unit) b where
   discardTupledUnits (a /\ _) = discardTupledUnits a
-else instance (DiscardTupledUnits aa ab, DiscardTupledUnits ba bb) => DiscardTupledUnits (aa /\ ba) (ab /\ bb) where
+else instance
+  ( DiscardTupledUnits aa ab
+  , DiscardTupledUnits ba bb
+  ) =>
+  DiscardTupledUnits (aa /\ ba) (ab /\ bb) where
   discardTupledUnits (a /\ b) = discardTupledUnits a /\ discardTupledUnits b
 else instance DiscardTupledUnits a a where
   discardTupledUnits = identity

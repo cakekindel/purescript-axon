@@ -9,11 +9,14 @@ import Web.Streams.ReadableStream (ReadableStream)
 
 foreign import data WebRequest :: Type
 
-foreign import body :: WebRequest -> Effect (Nullable (ReadableStream Uint8Array))
+foreign import body ::
+  WebRequest -> Effect (Nullable (ReadableStream Uint8Array))
+
 foreign import bodyUsed :: WebRequest -> Effect Boolean
 foreign import method :: WebRequest -> Effect String
 foreign import url :: WebRequest -> Effect String
 
 foreign import headers :: WebRequest -> Effect WebHeaders
 
-foreign import readableFromWeb :: ReadableStream Uint8Array -> Effect (Stream.Readable ())
+foreign import readableFromWeb ::
+  ReadableStream Uint8Array -> Effect (Stream.Readable ())

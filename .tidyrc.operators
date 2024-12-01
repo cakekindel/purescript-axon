@@ -1,0 +1,16 @@
+purs-tidy
+    Unexpected argument:
+        generate-oprators
+
+    A tidy-upper for PureScript source code.
+
+    --help,-h             Show this help message.
+    --version,-v          Shows the current version.
+    
+    check                 Check source files are formatted.
+    format                Format input over stdin.
+    format-in-place       Format source files in place.
+    generate-config       Writes a .tidyrc file to the current working directory based
+                          on the command line options given.
+    generate-operators    Generate an operator precedence table for better operator formatting.
+                          Best used with `spago sources`. Prints to stdout.

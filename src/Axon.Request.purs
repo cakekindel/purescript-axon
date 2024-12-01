@@ -1,4 +1,24 @@
-module Axon.Request (Request, Body(..), BodyReadableError(..), BodyStringError(..), BodyJSONError(..), BodyBufferError(..), bodyReadable, bodyString, bodyJSON, bodyBuffer, headers, method, address, url, contentType, accept, contentLength, lookupHeader, make) where
+module Axon.Request
+  ( Request
+  , Body(..)
+  , BodyReadableError(..)
+  , BodyStringError(..)
+  , BodyJSONError(..)
+  , BodyBufferError(..)
+  , bodyReadable
+  , bodyString
+  , bodyJSON
+  , bodyBuffer
+  , headers
+  , method
+  , address
+  , url
+  , contentType
+  , accept
+  , contentLength
+  , lookupHeader
+  , make
+  ) where
 
 import Prelude
 
@@ -54,7 +74,8 @@ data BodyBufferError
 derive instance Generic BodyBufferError _
 instance Eq BodyBufferError where
   eq (BodyBufferErrorReadable a) (BodyBufferErrorReadable b) = a == b
-  eq (BodyBufferErrorReading a) (BodyBufferErrorReading b) = Error.message a == Error.message b
+  eq (BodyBufferErrorReading a) (BodyBufferErrorReading b) = Error.message a ==
+    Error.message b
   eq _ _ = false
 
 instance Show BodyBufferError where
@@ -95,17 +116,26 @@ data Request =
     , bodyRef :: Effect.Ref Body
     }
 
-make
-  :: { headers :: Map String String
-     , address :: Either (SocketAddress IPv4) (SocketAddress IPv6)
-     , url :: URL
-     , method :: Method
-     , body :: Body
-     }
-  -> Effect Request
+make ::
+  { headers :: Map String String
+  , address :: Either (SocketAddress IPv4) (SocketAddress IPv6)
+  , url :: URL
+  , method :: Method
+  , body :: Body
+  } ->
+  Effect Request
 make a = do
   bodyRef <- Ref.new a.body
-  pure $ Request { bodyRef: bodyRef, headers: foldlWithIndex (\k m v -> Map.insert (String.Lower.fromString k) v m) Map.empty a.headers, address: a.address, url: a.url, method: a.method }
+  pure $ Request
+    { bodyRef: bodyRef
+    , headers: foldlWithIndex
+        (\k m v -> Map.insert (String.Lower.fromString k) v m)
+        Map.empty
+        a.headers
+    , address: a.address
+    , url: a.url
+    , method: a.method
+    }
 
 headers :: Request -> Map StringLower String
 headers (Request a) = a.headers
@@ -131,7 +161,8 @@ address (Request a) = a.address
 url :: Request -> URL
 url (Request a) = a.url
 
-bodyReadable :: Request -> Effect (Either BodyReadableError (Stream.Readable ()))
+bodyReadable ::
+  Request -> Effect (Either BodyReadableError (Stream.Readable ()))
 bodyReadable (Request { bodyRef }) = runExceptT do
   body <- liftEffect $ Ref.read bodyRef
   case body of
@@ -141,7 +172,9 @@ bodyReadable (Request { bodyRef }) = runExceptT do
       Ref.write BodyReadableConsumed bodyRef $> r # lift
     BodyCached buf -> Stream.readableFromBuffer buf # lift
     BodyCachedString str -> Stream.readableFromString str UTF8 # lift
-    BodyCachedJSON json -> json # JSON.stringify # flip Buffer.fromString UTF8 >>= Stream.readableFromBuffer # lift
+    BodyCachedJSON json -> json # JSON.stringify # flip Buffer.fromString UTF8
+      >>= Stream.readableFromBuffer
+      # lift
 
 bodyBuffer :: Request -> Aff (Either BodyBufferError Buffer)
 bodyBuffer r@(Request { bodyRef }) =
@@ -164,7 +197,8 @@ bodyBuffer r@(Request { bodyRef }) =
       case body of
         BodyCached buf -> pure buf
         BodyCachedString str -> Buffer.fromString str UTF8 # liftEffect
-        BodyCachedJSON json -> Buffer.fromString (JSON.stringify json) UTF8 # liftEffect
+        BodyCachedJSON json -> Buffer.fromString (JSON.stringify json) UTF8 #
+          liftEffect
         _ -> do
           buf <- stream >>= readAll
           Ref.write (BodyCached buf) bodyRef $> buf # liftEffect

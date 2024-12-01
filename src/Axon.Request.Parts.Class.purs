@@ -1,4 +1,10 @@
-module Axon.Request.Parts.Class (class RequestParts, extractRequestParts, module Parts.Method, module Parts.Body, module Path.Parts) where
+module Axon.Request.Parts.Class
+  ( class RequestParts
+  , extractRequestParts
+  , module Parts.Method
+  , module Parts.Body
+  , module Path.Parts
+  ) where
 
 import Prelude
 
@@ -8,10 +14,34 @@ import Axon.Request.Method (Method)
 import Axon.Request.Method as Method
 import Axon.Request.Parts.Body (Json(..), Stream(..))
 import Axon.Request.Parts.Body (Json(..), Stream(..)) as Parts.Body
-import Axon.Request.Parts.Method (Connect, Delete, Get, Options, Patch, Post, Put, Trace)
-import Axon.Request.Parts.Method (Get(..), Post(..), Put(..), Patch(..), Delete(..), Trace(..), Options(..), Connect(..)) as Parts.Method
+import Axon.Request.Parts.Method
+  ( Connect
+  , Delete
+  , Get
+  , Options
+  , Patch
+  , Post
+  , Put
+  , Trace
+  )
+import Axon.Request.Parts.Method
+  ( Get(..)
+  , Post(..)
+  , Put(..)
+  , Patch(..)
+  , Delete(..)
+  , Trace(..)
+  , Options(..)
+  , Connect(..)
+  ) as Parts.Method
 import Axon.Request.Parts.Path (Path(..)) as Path.Parts
-import Axon.Request.Parts.Path (class DiscardTupledUnits, class PathParts, Path(..), discardTupledUnits, extractPathParts)
+import Axon.Request.Parts.Path
+  ( class DiscardTupledUnits
+  , class PathParts
+  , Path(..)
+  , discardTupledUnits
+  , extractPathParts
+  )
 import Axon.Response (Response)
 import Axon.Response as Response
 import Control.Alternative (guard)
@@ -30,7 +60,13 @@ import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Node.Buffer (Buffer)
 
-extractMethod :: forall @t a. RequestParts a => Newtype t a => Method -> Request -> Aff (Either Response (Maybe t))
+extractMethod ::
+  forall @t a.
+  RequestParts a =>
+  Newtype t a =>
+  Method ->
+  Request ->
+  Aff (Either Response (Maybe t))
 extractMethod method r =
   if Request.method r == method then
     extractRequestParts @a r
