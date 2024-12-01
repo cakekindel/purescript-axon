@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "types": ["bun-types"],
+    "lib": ["esnext"],
+    "target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "jsx": "react",
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true
+  },
+  "include": [
+    "./scripts/*.js",
+    "ui-serve/**/*.js",
+    "api/**/*.js",
+    "ui/**/*.js",
+    "aws/**/*.js",
+    "logging/**/*.js"
+  ]
+}

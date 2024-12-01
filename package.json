@@ -1,0 +1,19 @@
+{
+  "name": "purescript-tower",
+  "private": true,
+  "module": "index.js",
+  "type": "module",
+  "scripts": {
+    "postinstall": "spago install",
+    "make": "spago build --pure",
+    "test": "spago test --pure",
+    "lint": "spago build --pure --strict --pedantic-packages && bun run scripts/fmt.js --check",
+    "lint:fix": "bun run scripts/fmt.js"
+  },
+  "devDependencies": {
+    "bun-types": "1.1.4",
+    "purs-tidy": "^0.10.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {}
+}
