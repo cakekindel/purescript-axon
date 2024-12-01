@@ -14,28 +14,45 @@
             {
               "argonaut-core": ">=7.0.0 <8.0.0"
             },
-            "arraybuffer-types",
-            "arrays",
-            "bifunctors",
             {
-              "console": ">=6.1.0 <7.0.0"
+              "arraybuffer-types": ">=3.0.2 <4.0.0"
             },
-            "control",
+            {
+              "arrays": ">=7.3.0 <8.0.0"
+            },
+            {
+              "bifunctors": ">=6.0.0 <7.0.0"
+            },
+            {
+              "control": ">=6.0.0 <7.0.0"
+            },
             {
               "effect": ">=4.0.0 <5.0.0"
             },
-            "either",
-            "exceptions",
+            {
+              "either": ">=6.1.0 <7.0.0"
+            },
+            {
+              "exceptions": ">=6.1.0 <7.0.0"
+            },
             {
               "ezfetch": ">=1.1.0 <2.0.0"
             },
-            "foldable-traversable",
-            "integers",
+            {
+              "foldable-traversable": ">=6.0.0 <7.0.0"
+            },
+            {
+              "integers": ">=6.0.0 <7.0.0"
+            },
             {
               "maybe": ">=6.0.0 <7.0.0"
             },
-            "newtype",
-            "node-buffer",
+            {
+              "newtype": ">=5.0.0 <6.0.0"
+            },
+            {
+              "node-buffer": ">=9.0.0 <10.0.0"
+            },
             {
               "node-net": ">=5.1.0 <6.0.0"
             },
@@ -45,11 +62,15 @@
             {
               "nullable": ">=6.0.0 <7.0.0"
             },
-            "ordered-collections",
+            {
+              "ordered-collections": ">=3.2.0 <4.0.0"
+            },
             {
               "prelude": ">=6.0.1 <7.0.0"
             },
-            "refs",
+            {
+              "refs": ">=6.0.0 <7.0.0"
+            },
             {
               "strings": ">=6.0.1 <7.0.0"
             },
@@ -59,7 +80,9 @@
             {
               "tuples": ">=7.0.0 <8.0.0"
             },
-            "typelevel-prelude",
+            {
+              "typelevel-prelude": ">=7.0.0 <8.0.0"
+            },
             {
               "url-immutable": ">=1.0.0 <2.0.0"
             },
@@ -76,7 +99,6 @@
             "arrays",
             "b64",
             "bifunctors",
-            "console",
             "const",
             "contravariant",
             "control",

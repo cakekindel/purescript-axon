@@ -15,14 +15,14 @@ import Axon.Request.Method as Method
 import Axon.Request.Parts.Body (Json(..), Stream(..))
 import Axon.Request.Parts.Body (Json(..), Stream(..)) as Parts.Body
 import Axon.Request.Parts.Method
-  ( Connect
-  , Delete
-  , Get
-  , Options
-  , Patch
-  , Post
-  , Put
-  , Trace
+  ( Connect(..)
+  , Delete(..)
+  , Get(..)
+  , Options(..)
+  , Patch(..)
+  , Post(..)
+  , Put(..)
+  , Trace(..)
   )
 import Axon.Request.Parts.Method
   ( Get(..)
@@ -61,20 +61,14 @@ import Effect.Class (liftEffect)
 import Node.Buffer (Buffer)
 
 extractMethod ::
-  forall @t a.
-  RequestParts a =>
-  Newtype t a =>
+  forall a.
+  a ->
   Method ->
   Request ->
-  Aff (Either Response (Maybe t))
-extractMethod method r =
+  Aff (Either Response (Maybe a))
+extractMethod a method r =
   if Request.method r == method then
-    extractRequestParts @a r
-      # ExceptT
-      # MaybeT
-      <#> wrap
-      # runMaybeT
-      # runExceptT
+    pure $ Right $ Just a
   else
     pure $ Right Nothing
 
@@ -161,29 +155,29 @@ instance RequestParts Stream where
     in
       streamBody <#> Stream # runMaybeT # runExceptT # liftEffect
 
-instance (RequestParts a) => RequestParts (Get a) where
-  extractRequestParts = extractMethod @(Get a) Method.GET
+instance RequestParts Get where
+  extractRequestParts = extractMethod Get Method.GET
 
-instance (RequestParts a) => RequestParts (Post a) where
-  extractRequestParts = extractMethod @(Post a) Method.POST
+instance RequestParts Post where
+  extractRequestParts = extractMethod Post Method.POST
 
-instance (RequestParts a) => RequestParts (Put a) where
-  extractRequestParts = extractMethod @(Put a) Method.PUT
+instance RequestParts Put where
+  extractRequestParts = extractMethod Put Method.PUT
 
-instance (RequestParts a) => RequestParts (Patch a) where
-  extractRequestParts = extractMethod @(Patch a) Method.PATCH
+instance RequestParts Patch where
+  extractRequestParts = extractMethod Patch Method.PATCH
 
-instance (RequestParts a) => RequestParts (Delete a) where
-  extractRequestParts = extractMethod @(Delete a) Method.DELETE
+instance RequestParts Delete where
+  extractRequestParts = extractMethod Delete Method.DELETE
 
-instance (RequestParts a) => RequestParts (Options a) where
-  extractRequestParts = extractMethod @(Options a) Method.OPTIONS
+instance RequestParts Options where
+  extractRequestParts = extractMethod Options Method.OPTIONS
 
-instance (RequestParts a) => RequestParts (Connect a) where
-  extractRequestParts = extractMethod @(Connect a) Method.CONNECT
+instance RequestParts Connect where
+  extractRequestParts = extractMethod Connect Method.CONNECT
 
-instance (RequestParts a) => RequestParts (Trace a) where
-  extractRequestParts = extractMethod @(Trace a) Method.TRACE
+instance RequestParts Trace where
+  extractRequestParts = extractMethod Trace Method.TRACE
 
 instance (RequestParts a, RequestParts b) => RequestParts (a /\ b) where
   extractRequestParts r = runExceptT $ runMaybeT do

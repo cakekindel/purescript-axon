@@ -61,10 +61,10 @@ spec = describe "Parts" do
       }
     a <-
       extractRequestParts
-        @(Patch ((Path ("users" / Int) _) /\ Json { firstName :: String }))
+        @(Patch /\ (Path ("users" / Int) _) /\ Json { firstName :: String })
         req <#> lmap (error <<< show) >>= liftEither >>= liftMaybe
         (error "was nothing")
-    a `shouldEqual` Patch (Path 12 /\ Json { firstName: "henry" })
+    a `shouldEqual` (Patch /\ Path 12 /\ Json { firstName: "henry" })
 
   describe "Path" do
     it "matches a route matching literal" do
@@ -231,8 +231,8 @@ spec = describe "Parts" do
             { address: "127.0.0.1", port: 81 }
         , method: POST
         }
-      a <- extractRequestParts @(Post (Json { foo :: Int, bar :: String })) req
+      a <- extractRequestParts @(Post /\ Json { foo :: Int, bar :: String }) req
         <#> lmap (error <<< show)
         >>= liftEither
         >>= liftMaybe (error "was nothing")
-      a `shouldEqual` Post (Json { foo: 123, bar: "abc" })
+      a `shouldEqual` (Post /\ Json { foo: 123, bar: "abc" })
