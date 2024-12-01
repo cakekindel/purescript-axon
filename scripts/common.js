@@ -3,7 +3,7 @@ import Path from 'path'
 
 export const rootDir = Path.resolve(__dirname, '..')
 
-export const packageDirs = async () => ['./src']
+export const packageDirs = async () => ['./src', './test']
 
 export const packageSources = async () => {
   const packages = await packageDirs()
