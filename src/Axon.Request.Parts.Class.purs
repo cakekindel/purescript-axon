@@ -1,6 +1,7 @@
 module Axon.Request.Parts.Class
   ( class RequestParts
   , extractRequestParts
+  , Header(..)
   , module Parts.Method
   , module Parts.Body
   , module Path.Parts
@@ -8,40 +9,17 @@ module Axon.Request.Parts.Class
 
 import Prelude
 
+import Axon.Header.Typed (class TypedHeader, headerName, headerValueParser)
 import Axon.Request (Request)
 import Axon.Request as Request
 import Axon.Request.Method (Method)
 import Axon.Request.Method as Method
 import Axon.Request.Parts.Body (Json(..), Stream(..))
 import Axon.Request.Parts.Body (Json(..), Stream(..)) as Parts.Body
-import Axon.Request.Parts.Method
-  ( Connect(..)
-  , Delete(..)
-  , Get(..)
-  , Options(..)
-  , Patch(..)
-  , Post(..)
-  , Put(..)
-  , Trace(..)
-  )
-import Axon.Request.Parts.Method
-  ( Get(..)
-  , Post(..)
-  , Put(..)
-  , Patch(..)
-  , Delete(..)
-  , Trace(..)
-  , Options(..)
-  , Connect(..)
-  ) as Parts.Method
+import Axon.Request.Parts.Method (Connect(..), Delete(..), Get(..), Options(..), Patch(..), Post(..), Put(..), Trace(..))
+import Axon.Request.Parts.Method (Get(..), Post(..), Put(..), Patch(..), Delete(..), Trace(..), Options(..), Connect(..)) as Parts.Method
 import Axon.Request.Parts.Path (Path(..)) as Path.Parts
-import Axon.Request.Parts.Path
-  ( class DiscardTupledUnits
-  , class PathParts
-  , Path(..)
-  , discardTupledUnits
-  , extractPathParts
-  )
+import Axon.Request.Parts.Path (class DiscardTupledUnits, class PathParts, Path(..), discardTupledUnits, extractPathParts)
 import Axon.Response (Response)
 import Axon.Response as Response
 import Control.Alternative (guard)
@@ -51,14 +29,25 @@ import Control.Monad.Trans.Class (lift)
 import Data.Argonaut.Decode (class DecodeJson, decodeJson)
 import Data.Array as Array
 import Data.Bifunctor (lmap)
-import Data.Either (Either(..))
+import Data.Either (Either(..), hush)
+import Data.Generic.Rep (class Generic)
+import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.Newtype (class Newtype, wrap)
+import Data.String.Lower as String.Lower
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.URL as URL
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Node.Buffer (Buffer)
+import Parsing (runParser)
+
+newtype Header a = Header a
+derive instance Generic (Header a) _
+derive instance Newtype (Header a) _
+derive newtype instance (Eq a) => Eq (Header a)
+derive newtype instance (Ord a) => Ord (Header a)
+derive newtype instance (Show a) => Show (Header a)
 
 extractMethod ::
   forall a.
@@ -95,6 +84,11 @@ instance RequestParts (Either Request.BodyStringError String) where
     Request.bodyString r
       <#> Just
       <#> Right
+
+instance TypedHeader a => RequestParts (Header a) where
+  extractRequestParts r = runExceptT $ runMaybeT do
+    value <- Request.headers r # Map.lookup (String.Lower.fromString $ headerName @a) # pure # MaybeT
+    runParser value (headerValueParser @a) # hush # pure # MaybeT <#> Header
 
 instance (PathParts a b, DiscardTupledUnits b c) => RequestParts (Path a c) where
   extractRequestParts r =

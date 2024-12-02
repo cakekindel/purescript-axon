@@ -2,16 +2,11 @@ module Test.Axon.Request.Parts where
 
 import Prelude
 
+import Axon.Header.Typed (ContentType(..))
 import Axon.Request (Request)
 import Axon.Request as Request
 import Axon.Request.Method (Method(..))
-import Axon.Request.Parts.Class
-  ( Json(..)
-  , Patch(..)
-  , Path(..)
-  , Post(..)
-  , extractRequestParts
-  )
+import Axon.Request.Parts.Class (Header(..), Json(..), Patch(..), Path(..), Post(..), extractRequestParts)
 import Axon.Request.Parts.Path (type (/), IgnoreRest)
 import Control.Monad.Error.Class (liftEither, liftMaybe)
 import Data.Bifunctor (lmap)
@@ -30,6 +25,7 @@ import Node.Stream as Stream
 import Partial.Unsafe (unsafePartial)
 import Test.Spec (Spec, describe, it)
 import Test.Spec.Assertions (shouldEqual)
+import Type.MIME as MIME
 
 spec :: Spec Unit
 spec = describe "Parts" do
@@ -37,7 +33,7 @@ spec = describe "Parts" do
     req <- liftEffect $ Request.make
       { body: Request.BodyEmpty
       , url: URL.fromString "http://localhost:80/foo" # unsafePartial fromJust
-      , headers: Map.empty
+      , headers: Map.singleton "content-type" "application/json"
       , address: Left $ unsafePerformEffect $ SocketAddress.newIpv4
           { address: "127.0.0.1", port: 81 }
       , method: GET
@@ -46,7 +42,7 @@ spec = describe "Parts" do
       >>= liftEither
       >>= liftMaybe (error "was nothing")
 
-  it "extracts method, path, JSON body" do
+  it "extracts header, method, path, JSON body" do
     stream <- Buffer.fromString """{"firstName": "henry"}""" UTF8
       >>= Stream.readableFromBuffer
       # liftEffect
@@ -54,17 +50,17 @@ spec = describe "Parts" do
       { body: Request.BodyReadable stream
       , url: URL.fromString "http://localhost:80/users/12" # unsafePartial
           fromJust
-      , headers: Map.empty
+      , headers: Map.singleton "content-type" "application/json"
       , address: Left $ unsafePerformEffect $ SocketAddress.newIpv4
           { address: "127.0.0.1", port: 81 }
       , method: PATCH
       }
     a <-
       extractRequestParts
-        @(Patch /\ (Path ("users" / Int) _) /\ Json { firstName :: String })
+        @(Patch /\ Header (ContentType MIME.Json) /\ (Path ("users" / Int) _) /\ Json { firstName :: String })
         req <#> lmap (error <<< show) >>= liftEither >>= liftMaybe
         (error "was nothing")
-    a `shouldEqual` (Patch /\ Path 12 /\ Json { firstName: "henry" })
+    a `shouldEqual` (Patch /\ Header (ContentType MIME.Json) /\ Path 12 /\ Json { firstName: "henry" })
 
   describe "Path" do
     it "matches a route matching literal" do
