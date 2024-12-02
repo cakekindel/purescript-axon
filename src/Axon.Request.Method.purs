@@ -14,18 +14,18 @@ derive instance Eq Method
 instance Show Method where
   show = genericShow
 
-methodToString :: Method -> String
-methodToString GET = "GET"
-methodToString POST = "POST"
-methodToString PUT = "PUT"
-methodToString PATCH = "PATCH"
-methodToString DELETE = "DELETE"
-methodToString OPTIONS = "OPTIONS"
-methodToString TRACE = "TRACE"
-methodToString CONNECT = "CONNECT"
+toString :: Method -> String
+toString GET = "GET"
+toString POST = "POST"
+toString PUT = "PUT"
+toString PATCH = "PATCH"
+toString DELETE = "DELETE"
+toString OPTIONS = "OPTIONS"
+toString TRACE = "TRACE"
+toString CONNECT = "CONNECT"
 
-methodFromString :: String -> Maybe Method
-methodFromString =
+fromString :: String -> Maybe Method
+fromString =
   let
     go "GET" = Just GET
     go "POST" = Just POST
