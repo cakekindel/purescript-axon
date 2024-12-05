@@ -17,15 +17,13 @@ import Data.Either (Either(..))
 import Data.Either.Nested (type (\/))
 import Data.Either.Nested as Either.Nested
 import Data.Enum (fromEnum, toEnum)
-import Data.Filterable (filter)
-import Data.Foldable (any, elem)
+import Data.Foldable (fold)
 import Data.Generic.Rep (class Generic)
 import Data.Int as Int
 import Data.MIME as MIME
 import Data.Map as Map
-import Data.Maybe (Maybe(..), isJust, maybe)
+import Data.Maybe (Maybe(..), fromMaybe, isJust)
 import Data.Newtype (class Newtype, unwrap, wrap)
-import Data.Set as Set
 import Data.Show.Generic (genericShow)
 import Data.String as String
 import Data.String.Base64 as String.Base64
@@ -38,18 +36,85 @@ import Data.String.Regex.Flags as Regex.Flags
 import Data.Time as Time
 import Data.Tuple (fst)
 import Data.Tuple.Nested (type (/\), (/\))
-import Effect.Console (log)
 import Effect.Exception as Error
-import Effect.Unsafe (unsafePerformEffect)
 import Parsing (Parser)
 import Parsing (liftMaybe, fail, liftEither) as Parse
-import Parsing.Combinators (between, choice, lookAhead, many, optional, sepBy, sepBy1, try) as Parse
-import Parsing.String (anyTill, regex, string, eof, rest) as Parse
+import Parsing.Combinators (between, choice, optionMaybe, optional, sepBy1, try) as Parse
+import Parsing.Combinators.Array (many, many1) as Parse
+import Parsing.String (anyTill, eof, regex, rest, string) as Parse
 import Parsing.String.Basic (whiteSpace, space, intDecimal, alphaNum) as Parse
-import Partial.Unsafe (unsafePartial)
+import Partial.Unsafe (unsafeCrashWith, unsafePartial)
 import Prim.Row (class Nub, class Union)
 import Record as Record
 import Type.MIME as Type.MIME
+
+-- TODO: this is fine, probably switch to a tokenizer at some point. parsing headers is also probably a solved problem
+
+rules ::
+    { char  :: Parser String String
+    , upAlpha  :: Parser String String
+    , loAlpha  :: Parser String String
+    , alpha  :: Parser String String
+    , digit  :: Parser String String
+    , ctl  :: Parser String String
+    , cr  :: Parser String String
+    , lf  :: Parser String String
+    , sp  :: Parser String String
+    , ht  :: Parser String String
+    , dquote  :: Parser String String
+    , crlf  :: Parser String String
+    , lws  :: Parser String String
+    , text  :: Parser String String
+    , separators  :: Parser String String
+    , token  :: Parser String String
+    , quoted  :: Parser String String
+    , cookieChar :: Parser String String
+    , token68 :: Parser String String
+    }
+rules =
+  let
+    un (Left e) = unsafeCrashWith e
+    un (Right a) = a
+    char = un $ Parse.regex "[\\x00-\\x7f]" Regex.Flags.noFlags
+    upAlpha = un $ Parse.regex "[A-Z]" Regex.Flags.noFlags
+    loAlpha = un $ Parse.regex "[a-z]" Regex.Flags.noFlags
+    alpha = loAlpha <|> upAlpha
+    digit = un $ Parse.regex "[0-9]" Regex.Flags.noFlags
+    ctl = un $ Parse.regex "[\\x00-\\x1f]|\\x7f" Regex.Flags.noFlags
+    cr = un $ Parse.regex "\\x0d" Regex.Flags.noFlags
+    lf = un $ Parse.regex "\\x0a" Regex.Flags.noFlags
+    sp = un $ Parse.regex "\\x20" Regex.Flags.noFlags
+    ht = un $ Parse.regex "\\x09" Regex.Flags.noFlags
+    dquote = un $ Parse.regex "\\x22" Regex.Flags.noFlags
+    crlf = un $ Parse.regex "\\x0d\\x0a" Regex.Flags.noFlags
+    lws = Parse.optional crlf *> Parse.many1 (Parse.try sp <|> ht) <#> fold
+    text = un $ Parse.regex "\\x20|\\x09|[^\\x00-\\x1f]" Regex.Flags.noFlags
+    separators = un $ Parse.regex "[()<>@,;:\\\\\"\\/\\[\\]?={}\\x20\\x09]" Regex.Flags.noFlags
+    token = un $ Parse.regex "[^\\x00-\\x1f()<>@,;:\\\\\"\\/\\[\\]?={}\\x20\\x09]+" Regex.Flags.noFlags
+    quoted = un $ Parse.regex "\"(.*)(?<!\\\\)\"" Regex.Flags.noFlags
+    cookieChar = un $ Parse.regex "\\x21|[\\x23-\\x2b]|[\\x2d-\\x3a]|[\\x3c-\\x5b]|[\\x5d-\\x7e]" Regex.Flags.noFlags
+    token68 = un $ Parse.regex "[a-zA-Z0-9\\-._~+\\/]+=*" Regex.Flags.noFlags
+  in
+    { char 
+    , upAlpha 
+    , loAlpha 
+    , alpha 
+    , digit 
+    , ctl 
+    , cr 
+    , lf 
+    , sp 
+    , ht 
+    , dquote 
+    , crlf 
+    , lws 
+    , text 
+    , separators 
+    , token 
+    , quoted
+    ,cookieChar
+    ,token68
+    }
 
 data Wildcard = Wildcard
 derive instance Generic Wildcard _
@@ -128,14 +193,31 @@ printDateTime dt =
         ]
         # Array.intercalate " "
 
+list :: forall a sep. Parser String sep -> Parser String a -> Parser String (Array a)
+list sep p = do
+  head <- Parse.optionMaybe p
+  tail <- Array.many (Parse.whiteSpace *> sep *> Parse.whiteSpace *> Parse.optionMaybe p)
+  pure $ Array.catMaybes $ [head] <> tail
+
+list1 :: forall a sep. Parser String sep -> Parser String a -> Parser String (NonEmptyArray a)
+list1 sep p = do
+  head <- p
+  tail <-
+    Array.many (Parse.whiteSpace *> sep *> Parse.whiteSpace *> Parse.optionMaybe p)
+    <#> Array.catMaybes
+  pure $ Array.NonEmpty.cons' head tail
+
 commas :: forall a. Parser String a -> Parser String (Array a)
-commas p = Parse.sepBy p (Parse.whiteSpace <* Parse.string "," <* Parse.whiteSpace) <#> Array.fromFoldable
+commas = list $ Parse.string ","
 
 commas1 :: forall a. Parser String a -> Parser String (NonEmptyArray a)
-commas1 p = Parse.sepBy1 p (Parse.whiteSpace <* Parse.string "," <* Parse.whiteSpace) <#> Array.NonEmpty.fromFoldable1
+commas1 = list1 $ Parse.string ","
 
 semis :: forall a. Parser String a -> Parser String (Array a)
-semis p = Parse.sepBy p (Parse.whiteSpace <* Parse.string ";" <* Parse.whiteSpace) <#> Array.fromFoldable
+semis = list $ Parse.string ";"
+
+semis1 :: forall a. Parser String a -> Parser String (NonEmptyArray a)
+semis1 = list1 $ Parse.string ";"
 
 wildcardParser :: Parser String Wildcard
 wildcardParser = Parse.whiteSpace *> (Parse.string "*" $> Wildcard) <* Parse.whiteSpace
@@ -153,29 +235,20 @@ headerNameParser :: Parser String StringLower
 headerNameParser = Parse.between Parse.whiteSpace Parse.whiteSpace (headerNameRegexParser <#> String.Lower.fromString)
 
 methodParser :: Parser String Method
-methodParser = Parse.between Parse.whiteSpace Parse.whiteSpace $ Parse.many Parse.alphaNum <#> Array.fromFoldable <#> String.CodeUnit.fromCharArray >>= (\a -> Parse.liftMaybe (const $ "invalid method " <> a) $ Method.fromString a)
+methodParser =
+  Parse.try (Parse.string "GET" $> Method.GET)
+  <|> Parse.try (Parse.string "HEAD" $> Method.HEAD)
+  <|> Parse.try (Parse.string "POST" $> Method.POST)
+  <|> Parse.try (Parse.string "PUT" $> Method.PUT)
+  <|> Parse.try (Parse.string "PATCH" $> Method.PATCH)
+  <|> Parse.try (Parse.string "DELETE" $> Method.DELETE)
+  <|> Parse.try (Parse.string "CONNECT" $> Method.CONNECT)
+  <|> Parse.try (Parse.string "OPTIONS" $> Method.OPTIONS)
+  <|> Parse.string "TRACE" $> Method.TRACE
 
-directiveParser :: Parser String (StringLower /\ Maybe String)
+directiveParser :: Parser String (String /\ Maybe String)
 directiveParser =
-  let
-    boundary = Parse.lookAhead $ Parse.try (Parse.string ",") <|> Parse.try (Parse.string ";") <|> Parse.try (Parse.eof *> pure "")
-    kvSep = Parse.string "="
-    kvParser =
-      pure (\k v -> k /\ Just v)
-        <*> (Parse.whiteSpace *> Parse.anyTill kvSep <#> fst <#> String.trim <#> String.Lower.fromString)
-        <*> (Parse.whiteSpace *> Parse.anyTill boundary <#> fst <#> String.trim)
-    kParser =
-      Parse.whiteSpace
-      *> Parse.anyTill boundary
-          <#> fst
-          <#> String.trim
-          <#> String.Lower.fromString
-          <#> (\k -> k /\ Nothing)
-  in
-    (Parse.try kvParser <|> kParser)
-      <#> Just
-      <#> filter (\(k /\ v) -> not (String.null $ String.Lower.toString k) && maybe true (not <<< String.null) v)
-      >>= (Parse.liftMaybe $ const "empty directive")
+  pure (/\) <*> rules.token <*> Parse.optionMaybe (Parse.string "=" *> (rules.quoted <|> rules.token))
 
 class TypedHeader a where
   headerName :: String
@@ -377,7 +450,7 @@ derive instance Newtype (ContentType a) _
 derive instance Eq a => Eq (ContentType a)
 instance Show a => Show (ContentType a) where show = genericShow
 
-newtype Cookie = Cookie String
+newtype Cookie = Cookie (NonEmptyArray (String /\ String))
 derive instance Newtype (Cookie) _
 derive instance Generic (Cookie) _
 instance Show (Cookie) where show = genericShow
@@ -1179,7 +1252,7 @@ instance TypedHeader AccessControlAllowHeaders where
   headerName = "Access-Control-Allow-Headers"
   headerValueParser =
     let
-      headers = commas1 headerNameParser <#> Right <#> AccessControlAllowHeaders
+      headers = commas1 rules.token <#> map String.Lower.fromString <#> Right <#> AccessControlAllowHeaders
     in
       Parse.try (wildcardParser $> AccessControlAllowHeaders (Left Wildcard)) <|> Parse.try headers
   headerValueEncode (AccessControlAllowHeaders (Left Wildcard)) = "*"
@@ -1243,10 +1316,9 @@ instance TypedHeader Allow where
 instance TypedHeader Authorization where
   headerName = "Authorization"
   headerValueParser =
-    let
-      scheme = Parse.whiteSpace *> (Parse.anyTill (void (Parse.try Parse.space) <|> Parse.eof) <#> fst <#> String.trim <#> AuthScheme)
-    in
-      pure Authorization <*> scheme <*> (Parse.rest <#> String.trim)
+    pure (\scheme val -> Authorization scheme val)
+    <*> ((rules.token <#> AuthScheme) <* Parse.whiteSpace)
+    <*> (Parse.optionMaybe rules.token68 <#> fromMaybe "")
   headerValueEncode (Authorization (AuthScheme s) v) = s <> " " <> v
 
 instance TypedHeader BasicAuth where
@@ -1273,29 +1345,7 @@ instance TypedHeader BearerAuth where
 instance TypedHeader CacheControl where
   headerName = "Cache-Control"
   headerValueParser = do
-    directives <- commas directiveParser <#> map (\(k /\ v) -> String.Lower.toString k /\ v) <#> Map.fromFoldable
-    let
-      keys =
-        [ "max-age"
-        , "max-stale"
-        , "min-fresh"
-        , "s-maxage"
-        , "no-cache"
-        , "no-store"
-        , "no-transform"
-        , "only-if-cached"
-        , "must-revalidate"
-        , "must-understand"
-        , "proxy-revalidate"
-        , "private"
-        , "public"
-        , "immutable"
-        , "stale-while-revalidate"
-        , "stale-if-error"
-        ]
-    when
-      (Map.keys directives # (Set.toUnfoldable :: _ (Array _)) # any (flip elem keys) # not)
-      (Parse.fail "no directives")
+    directives <- commas directiveParser <#> Map.fromFoldable
     pure $ CacheControl
       { maxAge: Map.lookup "max-age" directives # join >>= Int.fromString
   , maxStale: Map.lookup "max-stale" directives # join >>= Int.fromString
@@ -1359,7 +1409,7 @@ instance TypedHeader ContentDisposition where
       inline = Parse.whiteSpace *> Parse.string "inline" *> boundary $> ContentDisposition (Either.Nested.in1 ContentDispositionInline)
       attachment = do
         void $ Parse.whiteSpace *> Parse.string "attachment" *> boundary *> Parse.whiteSpace
-        directives <- semis directiveParser <#> map (\(k /\ v) -> String.Lower.toString k /\ v) <#> Map.fromFoldable
+        directives <- semis directiveParser <#> Map.fromFoldable
         let
           filename =
             (Map.lookup "filename" directives <|> Map.lookup "filename*" directives)
@@ -1368,7 +1418,7 @@ instance TypedHeader ContentDisposition where
         pure $ ContentDisposition $ Either.Nested.in2 $ ContentDispositionAttachment {filename}
       formData = do
         void $ Parse.whiteSpace *> Parse.string "form-data" *> boundary *> Parse.whiteSpace
-        directives <- semis directiveParser <#> map (\(k /\ v) -> String.Lower.toString k /\ v) <#> Map.fromFoldable
+        directives <- semis directiveParser <#> Map.fromFoldable
         let
           filename = Map.lookup "filename" directives # join <#> Regex.replace quotesRe ""
           name = Map.lookup "name" directives # join <#> Regex.replace quotesRe ""
@@ -1398,7 +1448,7 @@ instance TypedHeader ContentLength where
 
 instance TypedHeader ContentLocation where
   headerName = "Content-Location"
-  headerValueParser = Parse.rest <#> ContentLocation
+  headerValueParser = Parse.rest <#> String.trim <#> ContentLocation
   headerValueEncode (ContentLocation a) = a
 
 instance TypedHeader ContentRange where
@@ -1419,9 +1469,13 @@ instance TypedHeader ContentRange where
         *> Parse.string "/"
         *> Parse.intDecimal <#> ByteRangeLength
     in
-      Parse.string "bytes"
+      Parse.whiteSpace
+      *> Parse.string "bytes"
       *> Parse.whiteSpace
-      *> Parse.try (startEndSize <#> Either.Nested.in1) <|> Parse.try (startEnd <#> Either.Nested.in2) <|> Parse.try (size <#> Either.Nested.in3)
+      *> ( (Parse.try startEndSize <#> Either.Nested.in1)
+           <|> (Parse.try startEnd <#> Either.Nested.in2)
+           <|> (Parse.try size <#> Either.Nested.in3)
+         )
       <#> ContentRange
   headerValueEncode (ContentRange a) =
     Either.Nested.either3
@@ -1433,8 +1487,16 @@ instance TypedHeader ContentRange where
 
 instance TypedHeader Cookie where
   headerName = "Cookie"
-  headerValueParser = Parse.rest <#> Cookie
-  headerValueEncode (Cookie a) = a
+  headerValueParser =
+    let
+      cookieName = rules.token
+      cookieValue =
+        (Parse.try (rules.dquote *> Parse.many rules.cookieChar <* rules.dquote) <|> Parse.many rules.cookieChar)
+        <#> fold
+      cookiePair = pure (\k v -> k /\ v) <*> (cookieName <* Parse.string "=") <*> cookieValue
+    in
+      Parse.sepBy1 cookiePair (Parse.string "; ") <#> Array.NonEmpty.fromFoldable1 <#> Cookie
+  headerValueEncode (Cookie as) = as <#> (\(k /\ v) -> k <> "=" <> v) # Array.NonEmpty.intercalate "; "
 
 instance TypedHeader Date where
   headerName = "Date"
@@ -1649,7 +1711,7 @@ instance TypedHeader SetCookie where
 instance TypedHeader StrictTransportSecurity where
   headerName = "Strict-Transport-Security"
   headerValueParser = do
-    directives <- commas1 directiveParser <#> map (\(k /\ v) -> String.Lower.toString k /\ v) <#> Map.fromFoldable
+    directives <- commas1 directiveParser <#> Map.fromFoldable
     pure $ StrictTransportSecurity
       { maxAge: Map.lookup "max-age" directives # join >>= Int.fromString
       , includeSubdomains: Map.lookup "includesubdomains" directives # isJust

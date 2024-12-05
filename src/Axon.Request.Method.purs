@@ -7,7 +7,7 @@ import Data.Maybe (Maybe(..))
 import Data.Show.Generic (genericShow)
 import Data.String as String
 
-data Method = GET | POST | PUT | PATCH | DELETE | OPTIONS | TRACE | CONNECT
+data Method = GET | POST | PUT | PATCH | DELETE | OPTIONS | TRACE | CONNECT | HEAD
 
 derive instance Generic Method _
 derive instance Eq Method
@@ -16,6 +16,7 @@ instance Show Method where
 
 toString :: Method -> String
 toString GET = "GET"
+toString HEAD = "HEAD"
 toString POST = "POST"
 toString PUT = "PUT"
 toString PATCH = "PATCH"
@@ -37,4 +38,4 @@ fromString =
     go "CONNECT" = Just CONNECT
     go _ = Nothing
   in
-    go <<< String.toUpper
+    go

@@ -2,7 +2,7 @@ module Test.Axon.Header.Typed where
 
 import Prelude
 
-import Axon.Header.Typed (class TypedHeader, Accept(..), AccessControlAllowCredentials(..), AccessControlAllowHeaders(..), AccessControlAllowMethods(..), AccessControlAllowOrigin(..), AccessControlExposeHeaders(..), AccessControlMaxAge(..), AccessControlRequestHeaders(..), AccessControlRequestMethod(..), Age(..), Allow(..), AuthScheme(..), Authorization(..), BasicAuth(..), BearerAuth(..), CacheControl(..), Connection(..), ConnectionClose(..), ContentDisposition(..), ContentDispositionAttachment(..), ContentDispositionFormData(..), ContentDispositionInline(..), ContentEncoding(..), ContentLength(..), ContentType(..), Wildcard(..), cacheControlDefaults, headerValueParser)
+import Axon.Header.Typed (class TypedHeader, Accept(..), AccessControlAllowCredentials(..), AccessControlAllowHeaders(..), AccessControlAllowMethods(..), AccessControlAllowOrigin(..), AccessControlExposeHeaders(..), AccessControlMaxAge(..), AccessControlRequestHeaders(..), AccessControlRequestMethod(..), Age(..), Allow(..), AuthScheme(..), Authorization(..), BasicAuth(..), BearerAuth(..), ByteRangeEnd(..), ByteRangeLength(..), ByteRangeStart(..), CacheControl(..), Connection(..), ConnectionClose(..), ContentDisposition(..), ContentDispositionAttachment(..), ContentDispositionFormData(..), ContentDispositionInline(..), ContentEncoding(..), ContentLength(..), ContentLocation(..), ContentRange(..), ContentType(..), Cookie(..), Wildcard(..), cacheControlDefaults, headerValueParser)
 import Axon.Request.Method (Method(..))
 import Control.Monad.Error.Class (liftEither)
 import Data.Bifunctor (lmap)
@@ -11,6 +11,7 @@ import Data.Either.Nested as Either.Nested
 import Data.MIME as MIME
 import Data.Maybe (Maybe(..))
 import Data.String.Lower as String.Lower
+import Data.Tuple.Nested ((/\))
 import Effect.Exception (error)
 import Parsing (parseErrorMessage, runParser)
 import Test.Spec (Spec, describe, it)
@@ -482,17 +483,18 @@ spec =
       " * " `is` AccessControlAllowHeaders (Left Wildcard)
       "* " `is` AccessControlAllowHeaders (Left Wildcard)
       "Vary" `is` AccessControlAllowHeaders (Right $ pure $ String.Lower.fromString "Vary")
-      " Vary" `is` AccessControlAllowHeaders (Right $ pure $ String.Lower.fromString "Vary")
-      " Vary  " `is` AccessControlAllowHeaders (Right $ pure $ String.Lower.fromString "Vary")
+      " Vary" `isnt` AccessControlAllowHeaders (Right $ pure $ String.Lower.fromString "Vary")
+      "Vary  " `isnt` AccessControlAllowHeaders (Right $ pure $ String.Lower.fromString "Vary")
+      "Vary,   " `is` AccessControlAllowHeaders (Right $ pure $ String.Lower.fromString "Vary")
       "Accept, Vary, Content-Type" `is` AccessControlAllowHeaders (Right $ (pure "Accept" <> pure "Vary" <> pure "Content-Type") <#> String.Lower.fromString)
     describe "AccessControlAllowMethods" do
       "*" `is` AccessControlAllowMethods (Left Wildcard)
       " * " `is` AccessControlAllowMethods (Left Wildcard)
       "* " `is` AccessControlAllowMethods (Left Wildcard)
       "GET" `is` AccessControlAllowMethods (Right $ pure GET)
-      "get" `is` AccessControlAllowMethods (Right $ pure GET)
-      "GET, PATCH" `is` AccessControlAllowMethods (Right $ pure GET <> pure PATCH)
-      "   GET    ,     PATCH    " `is` AccessControlAllowMethods (Right $ pure GET <> pure PATCH)
+      "get" `isnt` AccessControlAllowMethods (Right $ pure GET)
+      "GET,,,,,, PATCH" `is` AccessControlAllowMethods (Right $ pure GET <> pure PATCH)
+      "   GET    ,     PATCH    " `isnt` AccessControlAllowMethods (Right $ pure GET <> pure PATCH)
     describe "AccessControlAllowOrigin" do
       "*" `is` AccessControlAllowOrigin (Left Wildcard)
       " * " `is` AccessControlAllowOrigin (Left Wildcard)
@@ -505,8 +507,8 @@ spec =
       " * " `is` AccessControlExposeHeaders (Left Wildcard)
       "* " `is` AccessControlExposeHeaders (Left Wildcard)
       "Vary" `is` AccessControlExposeHeaders (Right $ pure $ String.Lower.fromString "Vary")
-      " Vary" `is` AccessControlExposeHeaders (Right $ pure $ String.Lower.fromString "Vary")
-      " Vary  " `is` AccessControlExposeHeaders (Right $ pure $ String.Lower.fromString "Vary")
+      "Vary" `is` AccessControlExposeHeaders (Right $ pure $ String.Lower.fromString "Vary")
+      "Vary  " `is` AccessControlExposeHeaders (Right $ pure $ String.Lower.fromString "Vary")
       "Accept, Vary, Content-Type" `is` AccessControlExposeHeaders (Right $ (pure "Accept" <> pure "Vary" <> pure "Content-Type") <#> String.Lower.fromString)
     describe "AccessControlMaxAge" do
       "  123 " `is` AccessControlMaxAge 123
@@ -519,22 +521,26 @@ spec =
       "Accept, Vary, Content-Type" `is` AccessControlRequestHeaders ((pure "Accept" <> pure "Vary" <> pure "Content-Type") <#> String.Lower.fromString)
     describe "AccessControlRequestMethod" do
       "GET" `is` AccessControlRequestMethod GET
-      "get" `is` AccessControlRequestMethod GET
-      "   patCh " `is` AccessControlRequestMethod PATCH
+      "   PATCH " `isnt` AccessControlRequestMethod PATCH
+      "get" `isnt` AccessControlRequestMethod GET
+      "PATCh" `isnt` AccessControlRequestMethod PATCH
     describe "Age" do
       "  123 " `is` Age 123
       "  0" `is` Age 0
       "23190" `is` Age 23190
     describe "Allow" do
       "GET" `is` Allow (pure GET)
-      "get" `is` Allow (pure GET)
+      "get" `isnt` Allow (pure GET)
       "GET, PATCH" `is` Allow (pure GET <> pure PATCH)
-      "   GET    ,     PATCH    " `is` Allow (pure GET <> pure PATCH)
+      "GET,,,,,,  , ,   ,PATCH" `is` Allow (pure GET <> pure PATCH)
+      "   GET    ,     PATCH    " `isnt` Allow (pure GET <> pure PATCH)
     describe "Authorization" do
       "Foo bar" `is` Authorization (AuthScheme "Foo") "bar"
       "Bing bar" `is` Authorization (AuthScheme "Bing") "bar"
-      "  Bing bar    " `is` Authorization (AuthScheme "Bing") "bar"
-      "bar" `isnt` Authorization (AuthScheme "Foo") "bar"
+      " Bing bar" `isnt` Authorization (AuthScheme "Bing") "bar"
+      "Bing bar " `is` Authorization (AuthScheme "Bing") "bar"
+      "  Bing bar    " `isnt` Authorization (AuthScheme "Bing") "bar"
+      "Bar" `is` Authorization (AuthScheme "Bar") ""
     describe "BasicAuth" do
       "Basic ZGVtbzpwQDU1dzByZA==" `is` BasicAuth {username: "demo", password: "p@55w0rd"}
       "Bearer ZGVtbzpwQDU1dzByZA==" `isnt` BasicAuth {username: "demo", password: "p@55w0rd"}
@@ -545,16 +551,17 @@ spec =
       "Bearer foo    " `is` BearerAuth "foo"
     describe "CacheControl" do
       "max-age=604800" `is` CacheControl (cacheControlDefaults {maxAge = Just 604800})
-      "   max-age=604800   " `is` CacheControl (cacheControlDefaults {maxAge = Just 604800})
+      "   max-age=604800" `isnt` CacheControl (cacheControlDefaults {maxAge = Just 604800})
+      "max-age=604800 " `isnt` CacheControl (cacheControlDefaults {maxAge = Just 604800})
       "max-age=604800, must-revalidate" `is` CacheControl (cacheControlDefaults {maxAge = Just 604800, mustRevalidate = true})
       "max-age=20, s-maxage=10, no-cache, must-revalidate, proxy-revalidate, no-store, private, public, must-understand, no-transform, immutable, stale-while-revalidate, stale-if-error"
         `is`
           CacheControl (cacheControlDefaults {maxAge = Just 20, sMaxAge = Just 10, noCache = true, mustRevalidate = true, proxyRevalidate = true, noStore = true, private = true, public = true, mustUnderstand = true, noTransform = true, immutable = true, staleWhileRevalidate = true, staleIfError = true})
-      "" `isnt` CacheControl cacheControlDefaults
+      "" `is` CacheControl cacheControlDefaults
       "    " `isnt` CacheControl cacheControlDefaults
-      "foo=bar" `isnt` CacheControl cacheControlDefaults
-      "foo" `isnt` CacheControl cacheControlDefaults
-      "   foo=bar " `isnt` CacheControl cacheControlDefaults
+      "foo=bar" `is` CacheControl cacheControlDefaults
+      "foo" `is` CacheControl cacheControlDefaults
+      "foo=bar " `isnt` CacheControl cacheControlDefaults
       "   foo " `isnt` CacheControl cacheControlDefaults
     describe "Connection" do
       "" `isnt` Connection (Left ConnectionClose)
@@ -568,11 +575,11 @@ spec =
       "form-data" `is` ContentDisposition (Either.Nested.in3 $ ContentDispositionFormData {filename: Nothing, name: Nothing})
       "form-data; name=\"foo\"" `is` ContentDisposition (Either.Nested.in3 $ ContentDispositionFormData {filename: Nothing, name: Just "foo"})
       "form-data; filename=\"foo.txt\"" `is` ContentDisposition (Either.Nested.in3 $ ContentDispositionFormData {filename: Just "foo.txt", name: Nothing})
-      "   form-data; filename=\"foo.txt\"   ;    name=\"foo\"   " `is` ContentDisposition (Either.Nested.in3 $ ContentDispositionFormData {filename: Just "foo.txt", name: Just "foo"})
+      "   form-data; filename=\"foo.txt\"   ;    name=\"foo\"   " `isnt` ContentDisposition (Either.Nested.in3 $ ContentDispositionFormData {filename: Just "foo.txt", name: Just "foo"})
 
       "attachment" `is` ContentDisposition (Either.Nested.in2 $ ContentDispositionAttachment {filename: Nothing})
       "attachment; filename=\"foo.txt\"" `is` ContentDisposition (Either.Nested.in2 $ ContentDispositionAttachment {filename: Just "foo.txt"})
-      "   attachment; filename=\"foo.txt\"     " `is` ContentDisposition (Either.Nested.in2 $ ContentDispositionAttachment {filename: Just "foo.txt"})
+      "   attachment; filename=\"foo.txt\"     " `isnt` ContentDisposition (Either.Nested.in2 $ ContentDispositionAttachment {filename: Just "foo.txt"})
 
       "inline" `is` ContentDisposition (Either.Nested.in1 $ ContentDispositionInline)
       "inline " `is` ContentDisposition (Either.Nested.in1 $ ContentDispositionInline)
@@ -585,9 +592,24 @@ spec =
       "  0    " `is` ContentLength 0
       "  1    " `is` ContentLength 1
       "  1212943817    " `is` ContentLength 1212943817
-    describe "ContentLocation" $ pure unit
-    describe "ContentRange" $ pure unit
-    describe "Cookie" $ pure unit
+    describe "ContentLocation" do
+      "" `is` ContentLocation ""
+      "a" `is` ContentLocation "a"
+      "  a " `is` ContentLocation "a"
+      "abc" `is` ContentLocation "abc"
+    describe "ContentRange" do
+      "bytes 0-10/10" `is` (ContentRange $ Either.Nested.in1 $ ByteRangeStart 0 /\ ByteRangeEnd 10 /\ ByteRangeLength 10)
+      "  bytes   0-10/10  " `is` (ContentRange $ Either.Nested.in1 $ ByteRangeStart 0 /\ ByteRangeEnd 10 /\ ByteRangeLength 10)
+      "  bytes   0-0/0  " `is` (ContentRange $ Either.Nested.in1 $ ByteRangeStart 0 /\ ByteRangeEnd 0 /\ ByteRangeLength 0)
+      "bytes 0-10/*" `is` (ContentRange $ Either.Nested.in2 $ ByteRangeStart 0 /\ ByteRangeEnd 10)
+      "  bytes    0-10/*  " `is` (ContentRange $ Either.Nested.in2 $ ByteRangeStart 0 /\ ByteRangeEnd 10)
+      "bytes */10" `is` (ContentRange $ Either.Nested.in3 $ ByteRangeLength 10)
+      "  bytes   */10   " `is` (ContentRange $ Either.Nested.in3 $ ByteRangeLength 10)
+    describe "Cookie" do
+      "foo=" `is` Cookie (pure ("foo" /\ ""))
+      "foo=bar" `is` Cookie (pure ("foo" /\ "bar"))
+      "foo=bar; baz=" `is` Cookie (pure ("foo" /\ "bar") <> pure ("baz" /\ ""))
+      "foo=bar; baz=quux" `is` Cookie (pure ("foo" /\ "bar") <> pure ("baz" /\ "quux"))
     describe "Date" $ pure unit
     describe "ETag" $ pure unit
     describe "ExpectContinue" $ pure unit
