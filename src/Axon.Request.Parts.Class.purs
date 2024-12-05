@@ -1,7 +1,10 @@
 module Axon.Request.Parts.Class
   ( class RequestParts
+  , class RequestHandler
+  , invokeHandler
   , extractRequestParts
-  , Header(..)
+  , ExtractError(..)
+  , module Parts.Header
   , module Parts.Method
   , module Parts.Body
   , module Path.Parts
@@ -16,79 +19,90 @@ import Axon.Request.Method (Method)
 import Axon.Request.Method as Method
 import Axon.Request.Parts.Body (Json(..), Stream(..))
 import Axon.Request.Parts.Body (Json(..), Stream(..)) as Parts.Body
+import Axon.Request.Parts.Header (Header(..), HeaderMap(..))
+import Axon.Request.Parts.Header (Header(..), HeaderMap(..)) as Parts.Header
 import Axon.Request.Parts.Method (Connect(..), Delete(..), Get(..), Options(..), Patch(..), Post(..), Put(..), Trace(..))
 import Axon.Request.Parts.Method (Get(..), Post(..), Put(..), Patch(..), Delete(..), Trace(..), Options(..), Connect(..)) as Parts.Method
 import Axon.Request.Parts.Path (Path(..)) as Path.Parts
 import Axon.Request.Parts.Path (class DiscardTupledUnits, class PathParts, Path(..), discardTupledUnits, extractPathParts)
-import Axon.Response (Response)
-import Axon.Response as Response
-import Control.Alternative (guard)
+import Control.Monad.Error.Class (liftEither, liftMaybe, throwError)
 import Control.Monad.Except (ExceptT(..), runExceptT)
-import Control.Monad.Maybe.Trans (MaybeT(..), runMaybeT)
-import Control.Monad.Trans.Class (lift)
 import Data.Argonaut.Decode (class DecodeJson, decodeJson)
+import Data.Argonaut.Decode.Error (printJsonDecodeError)
 import Data.Array as Array
-import Data.Bifunctor (lmap)
-import Data.Either (Either(..), hush)
+import Data.Bifunctor (bimap, lmap)
+import Data.Either (Either(..), note)
 import Data.Generic.Rep (class Generic)
 import Data.Map as Map
-import Data.Maybe (Maybe(..))
-import Data.Newtype (class Newtype, wrap)
+import Data.Show.Generic (genericShow)
 import Data.String.Lower as String.Lower
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.URL as URL
 import Effect.Aff (Aff)
+import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (liftEffect)
 import Node.Buffer (Buffer)
 import Parsing (runParser)
+import Parsing.String (parseErrorHuman)
 
-newtype Header a = Header a
-derive instance Generic (Header a) _
-derive instance Newtype (Header a) _
-derive newtype instance (Eq a) => Eq (Header a)
-derive newtype instance (Ord a) => Ord (Header a)
-derive newtype instance (Show a) => Show (Header a)
+data ExtractError
+  = ExtractError String
+  | ExtractNext
+  | ExtractBadRequest String
+
+derive instance Generic ExtractError _
+derive instance Eq ExtractError
+instance Show ExtractError where show = genericShow
 
 extractMethod ::
   forall a.
   a ->
   Method ->
   Request ->
-  Aff (Either Response (Maybe a))
-extractMethod a method r =
-  if Request.method r == method then
-    pure $ Right $ Just a
-  else
-    pure $ Right Nothing
+  Aff (Either ExtractError a)
+extractMethod a method r = runExceptT do
+  when (Request.method r /= method) $ throwError ExtractNext
+  pure a
+
+class MonadAff m <= RequestHandler a m b | a -> b m where
+  invokeHandler :: Request -> a -> m (Either ExtractError b)
+
+instance (MonadAff m, RequestHandler f m b, RequestParts a) => RequestHandler (a -> f) m b where
+  invokeHandler req f = runExceptT do
+    a <- ExceptT $ liftAff $ extractRequestParts @a req
+    ExceptT $ invokeHandler req (f a)
+else instance (MonadAff m) => RequestHandler (m a) m a where
+  invokeHandler _ m = m <#> Right
 
 class RequestParts a where
-  extractRequestParts :: Request -> Aff (Either Response (Maybe a))
+  extractRequestParts :: Request -> Aff (Either ExtractError a)
 
 instance RequestParts Unit where
-  extractRequestParts _ = pure unit # runMaybeT # runExceptT
+  extractRequestParts _ = pure unit # runExceptT
 
 instance RequestParts Request where
-  extractRequestParts r = pure r # runMaybeT # runExceptT
+  extractRequestParts r = pure r # runExceptT
 
 instance RequestParts String where
   extractRequestParts r =
     Request.bodyString r
-      <#> lmap (const $ Response.fromStatus 500)
-      # ExceptT
-      # lift
-      # runMaybeT
-      # runExceptT
+      <#> lmap (const $ ExtractBadRequest "Expected body to be valid UTF-8")
 
 instance RequestParts (Either Request.BodyStringError String) where
-  extractRequestParts r =
-    Request.bodyString r
-      <#> Just
-      <#> Right
+  extractRequestParts r = Request.bodyString r <#> Right
 
 instance TypedHeader a => RequestParts (Header a) where
-  extractRequestParts r = runExceptT $ runMaybeT do
-    value <- Request.headers r # Map.lookup (String.Lower.fromString $ headerName @a) # pure # MaybeT
-    runParser value (headerValueParser @a) # hush # pure # MaybeT <#> Header
+  extractRequestParts r = runExceptT do
+    value <-
+      Request.headers r
+        # Map.lookup (String.Lower.fromString $ headerName @a)
+        # liftMaybe ExtractNext
+    runParser value (headerValueParser @a)
+      # bimap (ExtractBadRequest <<< Array.intercalate "\n" <<< parseErrorHuman value 5) Header
+      # liftEither
+
+instance RequestParts HeaderMap where
+  extractRequestParts r = runExceptT $ pure $ HeaderMap $ Request.headers r
 
 instance (PathParts a b, DiscardTupledUnits b c) => RequestParts (Path a c) where
   extractRequestParts r =
@@ -98,16 +112,14 @@ instance (PathParts a b, DiscardTupledUnits b c) => RequestParts (Path a c) wher
         URL.PathRelative a -> a
         _ -> []
       extract = extractPathParts @a @b (Request.url r)
-      ensureConsumed (leftover /\ x) = guard (Array.null leftover) $> x
+      ensureConsumed (leftover /\ x) = when (not $ Array.null leftover) (throwError ExtractNext) $> x
     in
       segments
         # extract
-        # Right
-        # MaybeT
+        # note ExtractNext
         >>= ensureConsumed
         <#> discardTupledUnits
         <#> Path
-        # runMaybeT
         # pure
 
 instance (DecodeJson a) => RequestParts (Json a) where
@@ -115,39 +127,26 @@ instance (DecodeJson a) => RequestParts (Json a) where
     let
       jsonBody =
         Request.bodyJSON r
-          <#> lmap (const $ Response.fromStatus 500)
+          <#> lmap (ExtractBadRequest <<< show)
           # ExceptT
-          # lift
       decode j =
         decodeJson j
-          # lmap (const $ Response.fromStatus 400)
+          # lmap (ExtractBadRequest <<< printJsonDecodeError)
           # pure
           # ExceptT
-          # lift
     in
-      jsonBody >>= decode <#> Json # runMaybeT # runExceptT
+      jsonBody >>= decode <#> Json # runExceptT
 
 instance RequestParts Buffer where
   extractRequestParts r =
-    let
-      bufBody =
-        Request.bodyBuffer r
-          <#> lmap (const $ Response.fromStatus 500)
-          # ExceptT
-          # lift
-    in
-      bufBody # runMaybeT # runExceptT
+    Request.bodyBuffer r
+      <#> lmap (const $ ExtractBadRequest "Expected body")
 
 instance RequestParts Stream where
   extractRequestParts r =
-    let
-      streamBody =
-        Request.bodyReadable r
-          <#> lmap (const $ Response.fromStatus 500)
-          # ExceptT
-          # lift
-    in
-      streamBody <#> Stream # runMaybeT # runExceptT # liftEffect
+    Request.bodyReadable r
+      <#> bimap (const $ ExtractBadRequest "Expected body") Stream
+      # liftEffect
 
 instance RequestParts Get where
   extractRequestParts = extractMethod Get Method.GET
@@ -174,7 +173,7 @@ instance RequestParts Trace where
   extractRequestParts = extractMethod Trace Method.TRACE
 
 instance (RequestParts a, RequestParts b) => RequestParts (a /\ b) where
-  extractRequestParts r = runExceptT $ runMaybeT do
-    a <- extractRequestParts @a r # ExceptT # MaybeT
-    b <- extractRequestParts @b r # ExceptT # MaybeT
+  extractRequestParts r = runExceptT do
+    a <- extractRequestParts @a r # ExceptT
+    b <- extractRequestParts @b r # ExceptT
     pure $ a /\ b

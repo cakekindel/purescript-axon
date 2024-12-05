@@ -17,62 +17,74 @@ import Data.Either (Either(..))
 import Data.Either.Nested (type (\/))
 import Data.Either.Nested as Either.Nested
 import Data.Enum (fromEnum, toEnum)
+import Data.Filterable (filter)
+import Data.Foldable (any, elem)
 import Data.Generic.Rep (class Generic)
 import Data.Int as Int
 import Data.MIME as MIME
 import Data.Map as Map
-import Data.Maybe (Maybe(..), isJust)
+import Data.Maybe (Maybe(..), isJust, maybe)
 import Data.Newtype (class Newtype, unwrap, wrap)
+import Data.Set as Set
 import Data.Show.Generic (genericShow)
 import Data.String as String
 import Data.String.Base64 as String.Base64
 import Data.String.CodeUnits as String.CodeUnit
 import Data.String.Lower (StringLower)
 import Data.String.Lower as String.Lower
+import Data.String.Regex (Regex)
+import Data.String.Regex as Regex
 import Data.String.Regex.Flags as Regex.Flags
 import Data.Time as Time
 import Data.Tuple (fst)
 import Data.Tuple.Nested (type (/\), (/\))
+import Effect.Console (log)
 import Effect.Exception as Error
+import Effect.Unsafe (unsafePerformEffect)
 import Parsing (Parser)
-import Parsing as Parse
-import Parsing.Combinators as Parse.Combine
-import Parsing.String as Parse.String
-import Parsing.String.Basic as Parse.String.Basic
+import Parsing (liftMaybe, fail, liftEither) as Parse
+import Parsing.Combinators (between, choice, lookAhead, many, optional, sepBy, sepBy1, try) as Parse
+import Parsing.String (anyTill, regex, string, eof, rest) as Parse
+import Parsing.String.Basic (whiteSpace, space, intDecimal, alphaNum) as Parse
 import Partial.Unsafe (unsafePartial)
 import Prim.Row (class Nub, class Union)
 import Record as Record
 import Type.MIME as Type.MIME
 
 data Wildcard = Wildcard
+derive instance Generic Wildcard _
 derive instance Eq Wildcard
+instance Show Wildcard where show = genericShow
+
+quotesRe :: Regex
+quotesRe = unsafePartial $ (\(Right a) -> a) $ Regex.regex "(^\\s*\")|(\"\\s*$)" Regex.Flags.global
 
 datetimeParser :: Parser String DateTime
 datetimeParser =
   let
     as :: forall a. String -> a -> Parser String a
-    as s a = Parse.String.string s $> a
+    as s a = Parse.string s $> a
 
-    weekday = Parse.Combine.choice [as "Mon" Monday, as "Tue" Tuesday, as "Wed" Wednesday, as "Thu" Thursday, as "Fri" Friday, as "Sat" Saturday, as "Sun" Sunday]
-    month = Parse.Combine.choice [as "Jan" January, as "Feb" February, as "Mar" March, as "Apr" April, as "May" May, as "Jun" June, as "Jul" July, as "Aug" August, as "Sep" September, as "Oct" October, as "Nov" November, as "Dec" December]
-    day = Parse.String.Basic.intDecimal <#> toEnum >>= Parse.liftMaybe (const "invalid day")
-    year = Parse.String.Basic.intDecimal <#> toEnum >>= Parse.liftMaybe (const "invalid year")
+    weekday = Parse.choice [as "Mon" Monday, as "Tue" Tuesday, as "Wed" Wednesday, as "Thu" Thursday, as "Fri" Friday, as "Sat" Saturday, as "Sun" Sunday]
+    month = Parse.choice [as "Jan" January, as "Feb" February, as "Mar" March, as "Apr" April, as "May" May, as "Jun" June, as "Jul" July, as "Aug" August, as "Sep" September, as "Oct" October, as "Nov" November, as "Dec" December]
+    day = Parse.intDecimal <#> toEnum >>= Parse.liftMaybe (const "invalid day")
+    year = Parse.intDecimal <#> toEnum >>= Parse.liftMaybe (const "invalid year")
     date =
       ( pure (\d m y -> Date.exactDate y m d)
-          <*> (weekday *> Parse.String.Basic.whiteSpace *> day)
-          <*> (Parse.String.Basic.whiteSpace *> month) <*> (Parse.String.Basic.whiteSpace *> year)
+          <*> (weekday *> Parse.whiteSpace *> day)
+          <*> (Parse.whiteSpace *> month) <*> (Parse.whiteSpace *> year)
       )
       >>= Parse.liftMaybe (const "invalid date")
 
     time =
       ( pure (\h m s ms -> Time.Time h m s ms)
-          <*> ((Parse.String.Basic.intDecimal <#> toEnum >>= Parse.liftMaybe (const "invalid hour")))
-          <*> (Parse.String.string ":" *> (Parse.String.Basic.intDecimal <#> toEnum >>= Parse.liftMaybe (const "invalid minutes")))
-          <*> (Parse.String.string ":" *> (Parse.String.Basic.intDecimal <#> toEnum >>= Parse.liftMaybe (const "invalid seconds")))
+          <*> ((Parse.intDecimal <#> toEnum >>= Parse.liftMaybe (const "invalid hour")))
+          <*> (Parse.string ":" *> (Parse.intDecimal <#> toEnum >>= Parse.liftMaybe (const "invalid minutes")))
+          <*> (Parse.string ":" *> (Parse.intDecimal <#> toEnum >>= Parse.liftMaybe (const "invalid seconds")))
           <*> (toEnum 0 # Parse.liftMaybe (const "invalid milliseconds"))
       )
   in
-    pure DateTime <*> (date <* Parse.String.Basic.whiteSpace) <*> time
+    pure DateTime <*> (date <* Parse.whiteSpace) <*> time
 
 
 printDateTime :: DateTime -> String
@@ -117,41 +129,53 @@ printDateTime dt =
         # Array.intercalate " "
 
 commas :: forall a. Parser String a -> Parser String (Array a)
-commas p = Parse.Combine.sepBy p (Parse.String.Basic.whiteSpace <* Parse.String.string "," <* Parse.String.Basic.whiteSpace) <#> Array.fromFoldable
+commas p = Parse.sepBy p (Parse.whiteSpace <* Parse.string "," <* Parse.whiteSpace) <#> Array.fromFoldable
 
 commas1 :: forall a. Parser String a -> Parser String (NonEmptyArray a)
-commas1 p = Parse.Combine.sepBy1 p (Parse.String.Basic.whiteSpace <* Parse.String.string "," <* Parse.String.Basic.whiteSpace) <#> Array.NonEmpty.fromFoldable1
+commas1 p = Parse.sepBy1 p (Parse.whiteSpace <* Parse.string "," <* Parse.whiteSpace) <#> Array.NonEmpty.fromFoldable1
+
+semis :: forall a. Parser String a -> Parser String (Array a)
+semis p = Parse.sepBy p (Parse.whiteSpace <* Parse.string ";" <* Parse.whiteSpace) <#> Array.fromFoldable
 
 wildcardParser :: Parser String Wildcard
-wildcardParser = Parse.String.string "*" $> Wildcard
+wildcardParser = Parse.whiteSpace *> (Parse.string "*" $> Wildcard) <* Parse.whiteSpace
 
 mimeParser :: Parser String MIME.MIME
-mimeParser = Parse.String.anyTill (void Parse.String.Basic.space <|> Parse.String.eof) <#> fst <#> MIME.fromString
+mimeParser = Parse.anyTill (void Parse.space <|> Parse.eof) <#> fst <#> MIME.fromString
 
 headerNameRegexParser :: Parser String String
-headerNameRegexParser = unsafePartial $ (\(Right a) -> a) $ Parse.String.regex "[\\w-]+" Regex.Flags.noFlags
+headerNameRegexParser = unsafePartial $ (\(Right a) -> a) $ Parse.regex "[\\w-]+" Regex.Flags.noFlags
 
 closeRegexParser :: Parser String String
-closeRegexParser = unsafePartial $ (\(Right a) -> a) $ Parse.String.regex "close" Regex.Flags.ignoreCase
+closeRegexParser = unsafePartial $ (\(Right a) -> a) $ Parse.regex "\\s*close\\s*" Regex.Flags.ignoreCase
 
 headerNameParser :: Parser String StringLower
-headerNameParser = headerNameRegexParser <#> String.Lower.fromString
+headerNameParser = Parse.between Parse.whiteSpace Parse.whiteSpace (headerNameRegexParser <#> String.Lower.fromString)
 
 methodParser :: Parser String Method
-methodParser = Parse.Combine.many Parse.String.Basic.alphaNum <#> Array.fromFoldable <#> String.CodeUnit.fromCharArray >>= (\a -> Parse.liftMaybe (const $ "invalid method " <> a) $ Method.fromString a)
+methodParser = Parse.between Parse.whiteSpace Parse.whiteSpace $ Parse.many Parse.alphaNum <#> Array.fromFoldable <#> String.CodeUnit.fromCharArray >>= (\a -> Parse.liftMaybe (const $ "invalid method " <> a) $ Method.fromString a)
 
 directiveParser :: Parser String (StringLower /\ Maybe String)
 directiveParser =
   let
-    boundary = Parse.String.string ";" <|> Parse.String.string "," <|> (Parse.String.eof *> pure "")
-    kvParser = do
-      k /\ stop <- Parse.String.anyTill (Parse.String.string "=" <|> boundary)
-      when (stop /= "=") $ Parse.fail ""
-      v <- Parse.String.anyTill boundary <#> fst
-      pure $ String.Lower.fromString (String.trim k) /\ Just (String.trim v)
-    kParser = Parse.String.anyTill boundary <#> fst <#> String.trim <#> String.Lower.fromString <#> (\k -> k /\ Nothing)
+    boundary = Parse.lookAhead $ Parse.try (Parse.string ",") <|> Parse.try (Parse.string ";") <|> Parse.try (Parse.eof *> pure "")
+    kvSep = Parse.string "="
+    kvParser =
+      pure (\k v -> k /\ Just v)
+        <*> (Parse.whiteSpace *> Parse.anyTill kvSep <#> fst <#> String.trim <#> String.Lower.fromString)
+        <*> (Parse.whiteSpace *> Parse.anyTill boundary <#> fst <#> String.trim)
+    kParser =
+      Parse.whiteSpace
+      *> Parse.anyTill boundary
+          <#> fst
+          <#> String.trim
+          <#> String.Lower.fromString
+          <#> (\k -> k /\ Nothing)
   in
-    kvParser <|> kParser
+    (Parse.try kvParser <|> kParser)
+      <#> Just
+      <#> filter (\(k /\ v) -> not (String.null $ String.Lower.toString k) && maybe true (not <<< String.null) v)
+      >>= (Parse.liftMaybe $ const "empty directive")
 
 class TypedHeader a where
   headerName :: String
@@ -165,68 +189,104 @@ derive instance Eq a => Eq (Accept a)
 instance Show a => Show (Accept a) where show = genericShow
 
 data AccessControlAllowCredentials = AccessControlAllowCredentials
+derive instance Generic AccessControlAllowCredentials _
+derive instance Eq AccessControlAllowCredentials
+instance Show AccessControlAllowCredentials where show = genericShow
 
 newtype AccessControlAllowHeaders = AccessControlAllowHeaders (Wildcard \/ NonEmptyArray StringLower)
+derive instance Generic (AccessControlAllowHeaders) _
 derive instance Newtype (AccessControlAllowHeaders) _
 derive instance Eq (AccessControlAllowHeaders)
+instance Show AccessControlAllowHeaders where show = genericShow
 
 newtype AccessControlAllowMethods = AccessControlAllowMethods (Wildcard \/ NonEmptyArray Method)
 derive instance Newtype (AccessControlAllowMethods) _
 derive instance Eq (AccessControlAllowMethods)
+derive instance Generic (AccessControlAllowMethods) _
+instance Show (AccessControlAllowMethods) where show = genericShow
 
 newtype AccessControlAllowOrigin = AccessControlAllowOrigin (Wildcard \/ String)
 derive instance Newtype (AccessControlAllowOrigin) _
 derive instance Eq (AccessControlAllowOrigin)
+derive instance Generic (AccessControlAllowOrigin) _
+instance Show (AccessControlAllowOrigin) where show = genericShow
 
 newtype AccessControlExposeHeaders = AccessControlExposeHeaders (Wildcard \/ Array StringLower)
 derive instance Newtype (AccessControlExposeHeaders) _
 derive instance Eq (AccessControlExposeHeaders)
+derive instance Generic (AccessControlExposeHeaders) _
+instance Show (AccessControlExposeHeaders) where show = genericShow
 
 newtype AccessControlMaxAge = AccessControlMaxAge Int
 derive instance Newtype (AccessControlMaxAge) _
 derive instance Eq (AccessControlMaxAge)
+derive instance Generic (AccessControlMaxAge) _
+instance Show (AccessControlMaxAge) where show = genericShow
 
 newtype AccessControlRequestHeaders = AccessControlRequestHeaders (NonEmptyArray StringLower)
 derive instance Newtype (AccessControlRequestHeaders) _
 derive instance Eq (AccessControlRequestHeaders)
+derive instance Generic (AccessControlRequestHeaders) _
+instance Show (AccessControlRequestHeaders) where show = genericShow
 
 newtype AccessControlRequestMethod = AccessControlRequestMethod Method
 derive instance Newtype (AccessControlRequestMethod) _
 derive instance Eq (AccessControlRequestMethod)
+derive instance Generic (AccessControlRequestMethod) _
+instance Show (AccessControlRequestMethod) where show = genericShow
 
 newtype Age = Age Int
 derive instance Newtype (Age) _
+derive instance Generic (Age) _
 derive instance Eq (Age)
+instance Show (Age) where show = genericShow
 
 newtype Allow = Allow (NonEmptyArray Method)
 derive instance Newtype (Allow) _
+derive instance Generic (Allow) _
 derive instance Eq (Allow)
+instance Show (Allow) where show = genericShow
 
 newtype AuthScheme = AuthScheme String
 derive instance Newtype (AuthScheme) _
+derive instance Generic (AuthScheme) _
 derive instance Eq (AuthScheme)
+instance Show (AuthScheme) where show = genericShow
 
 data Authorization = Authorization AuthScheme String
+derive instance Generic (Authorization) _
+derive instance Eq (Authorization)
+instance Show (Authorization) where show = genericShow
 
 newtype BearerAuth = BearerAuth String
 derive instance Newtype (BearerAuth) _
+derive instance Generic (BearerAuth) _
 derive instance Eq (BearerAuth)
+instance Show (BearerAuth) where show = genericShow
 
 newtype BasicAuth = BasicAuth {username :: String, password :: String}
 derive instance Newtype (BasicAuth) _
+derive instance Generic (BasicAuth) _
 derive instance Eq (BasicAuth)
+instance Show (BasicAuth) where show = genericShow
 
 newtype ByteRangeStart = ByteRangeStart Int
 derive instance Newtype (ByteRangeStart) _
+derive instance Generic (ByteRangeStart) _
 derive instance Eq (ByteRangeStart)
+instance Show (ByteRangeStart) where show = genericShow
 
 newtype ByteRangeEnd = ByteRangeEnd Int
 derive instance Newtype (ByteRangeEnd) _
+derive instance Generic (ByteRangeEnd) _
 derive instance Eq (ByteRangeEnd)
+instance Show (ByteRangeEnd) where show = genericShow
 
 newtype ByteRangeLength = ByteRangeLength Int
 derive instance Newtype (ByteRangeLength) _
+derive instance Generic (ByteRangeLength) _
 derive instance Eq (ByteRangeLength)
+instance Show (ByteRangeLength) where show = genericShow
 
 type CacheControl' =
   ( maxAge :: Maybe Int
@@ -249,45 +309,67 @@ type CacheControl' =
 
 newtype CacheControl = CacheControl (Record CacheControl')
 derive instance Newtype (CacheControl) _
+derive instance Generic (CacheControl) _
 derive instance Eq (CacheControl)
+instance Show (CacheControl) where show = genericShow
 
 data ConnectionClose = ConnectionClose
 derive instance Eq (ConnectionClose)
+instance Show (ConnectionClose) where show = genericShow
+derive instance Generic (ConnectionClose) _
 
 newtype Connection = Connection (ConnectionClose \/ NonEmptyArray StringLower)
 derive instance Newtype (Connection) _
+derive instance Generic (Connection) _
 derive instance Eq (Connection)
+instance Show (Connection) where show = genericShow
 
 newtype ContentDisposition = ContentDisposition (ContentDispositionInline \/ ContentDispositionAttachment \/ ContentDispositionFormData \/ Void)
 derive instance Newtype (ContentDisposition) _
+derive instance Generic (ContentDisposition) _
 derive instance Eq (ContentDisposition)
+instance Show (ContentDisposition) where show = genericShow
 
 data ContentDispositionInline = ContentDispositionInline
+derive instance Generic (ContentDispositionInline) _
 derive instance Eq (ContentDispositionInline)
+instance Show (ContentDispositionInline) where show = genericShow
 
 newtype ContentDispositionAttachment = ContentDispositionAttachment {filename :: Maybe String}
 derive instance Newtype (ContentDispositionAttachment) _
+derive instance Generic (ContentDispositionAttachment) _
 derive instance Eq (ContentDispositionAttachment)
+instance Show (ContentDispositionAttachment) where show = genericShow
 
 newtype ContentDispositionFormData = ContentDispositionFormData {filename :: Maybe String, name :: Maybe String}
 derive instance Newtype (ContentDispositionFormData) _
+derive instance Generic (ContentDispositionFormData) _
 derive instance Eq (ContentDispositionFormData)
+instance Show (ContentDispositionFormData) where show = genericShow
 
 newtype ContentEncoding = ContentEncoding (NonEmptyArray String)
 derive instance Newtype (ContentEncoding) _
+derive instance Generic (ContentEncoding) _
 derive instance Eq (ContentEncoding)
+instance Show (ContentEncoding) where show = genericShow
 
 newtype ContentLength = ContentLength Int
 derive instance Newtype (ContentLength) _
+derive instance Generic (ContentLength) _
 derive instance Eq (ContentLength)
+instance Show (ContentLength) where show = genericShow
 
 newtype ContentLocation = ContentLocation String
 derive instance Newtype (ContentLocation) _
+derive instance Generic (ContentLocation) _
 derive instance Eq (ContentLocation)
+instance Show (ContentLocation) where show = genericShow
 
 newtype ContentRange = ContentRange ((ByteRangeStart /\ ByteRangeEnd /\ ByteRangeLength) \/ (ByteRangeStart /\ ByteRangeEnd) \/ ByteRangeLength \/ Void)
 derive instance Newtype (ContentRange) _
+derive instance Generic (ContentRange) _
 derive instance Eq (ContentRange)
+instance Show (ContentRange) where show = genericShow
 
 newtype ContentType a = ContentType a
 derive instance Generic (ContentType a) _
@@ -297,125 +379,186 @@ instance Show a => Show (ContentType a) where show = genericShow
 
 newtype Cookie = Cookie String
 derive instance Newtype (Cookie) _
+derive instance Generic (Cookie) _
+instance Show (Cookie) where show = genericShow
 derive instance Eq (Cookie)
 
 newtype Date = Date DateTime
 derive instance Newtype (Date) _
+derive instance Generic (Date) _
+instance Show (Date) where show = genericShow
 derive instance Eq (Date)
 
 newtype ETag = ETag String
 derive instance Newtype (ETag) _
+derive instance Generic (ETag) _
+instance Show (ETag) where show = genericShow
 derive instance Eq (ETag)
 
 data ExpectContinue = ExpectContinue
 
 newtype Expires = Expires DateTime
 derive instance Newtype (Expires) _
+derive instance Generic (Expires) _
+instance Show (Expires) where show = genericShow
 derive instance Eq (Expires)
 
 newtype Host = Host String
 derive instance Newtype (Host) _
+derive instance Generic (Host) _
+instance Show (Host) where show = genericShow
 derive instance Eq (Host)
 
 newtype IfMatch = IfMatch (Wildcard \/ NonEmptyArray String)
 derive instance Newtype (IfMatch) _
+derive instance Generic (IfMatch) _
+instance Show (IfMatch) where show = genericShow
 derive instance Eq (IfMatch)
 
 newtype IfNoneMatch = IfNoneMatch (Wildcard \/ NonEmptyArray MatchETag)
 derive instance Newtype (IfNoneMatch) _
+derive instance Generic (IfNoneMatch) _
+instance Show (IfNoneMatch) where show = genericShow
 derive instance Eq (IfNoneMatch)
 
 newtype IfModifiedSince = IfModifiedSince DateTime
 derive instance Newtype (IfModifiedSince) _
+derive instance Generic (IfModifiedSince) _
+instance Show (IfModifiedSince) where show = genericShow
 derive instance Eq (IfModifiedSince)
 
 newtype IfRange = IfRange (DateTime \/ String)
 derive instance Newtype (IfRange) _
+derive instance Generic (IfRange) _
+instance Show (IfRange) where show = genericShow
 derive instance Eq (IfRange)
 
 newtype IfUnmodifiedSince = IfUnmodifiedSince DateTime
 derive instance Newtype (IfUnmodifiedSince) _
+derive instance Generic (IfUnmodifiedSince) _
+instance Show (IfUnmodifiedSince) where show = genericShow
 derive instance Eq (IfUnmodifiedSince)
 
 newtype LastModified = LastModified DateTime
 derive instance Newtype (LastModified) _
+derive instance Generic (LastModified) _
+instance Show (LastModified) where show = genericShow
 derive instance Eq (LastModified)
 
 data MatchETag = MatchETag String | MatchETagWeak String
 derive instance Eq MatchETag 
+instance Show MatchETag where show = genericShow
+derive instance Generic MatchETag _
 
 newtype Origin = Origin String
 derive instance Newtype (Origin) _
+derive instance Generic (Origin) _
+instance Show (Origin) where show = genericShow
 derive instance Eq (Origin)
 
 data ProxyAuthorization = ProxyAuthorization AuthScheme String
+derive instance Generic (ProxyAuthorization) _
+derive instance Eq (ProxyAuthorization)
+instance Show (ProxyAuthorization) where show = genericShow
 
-type RangeSpecifier = ByteRangeStart \/ (ByteRangeStart /\ ByteRangeEnd) \/ ByteRangeLength
+type RangeSpecifier = ByteRangeStart \/ (ByteRangeStart /\ ByteRangeEnd) \/ ByteRangeLength \/ Void
 
-newtype Range = Range (RangeSpecifier \/ Array RangeSpecifier)
+newtype Range = Range (NonEmptyArray RangeSpecifier)
 derive instance Newtype (Range) _
+derive instance Generic (Range) _
+instance Show (Range) where show = genericShow
 derive instance Eq (Range)
 
 newtype Referer = Referer String
 derive instance Newtype (Referer) _
+derive instance Generic (Referer) _
+instance Show (Referer) where show = genericShow
 derive instance Eq (Referer)
 
 data ReferrerPolicy
   = ReferrerPolicyNoReferrer
   | ReferrerPolicyNoReferrerWhenDowngrade
-  | ReferrerPolicySameOrigin
   | ReferrerPolicyOrigin
   | ReferrerPolicyOriginWhenCrossOrigin
-  | ReferrerPolicyUnsafeURL
+  | ReferrerPolicySameOrigin
   | ReferrerPolicyStrictOrigin
   | ReferrerPolicyStrictOriginWhenCrossOrigin
+  | ReferrerPolicyUnsafeURL
+
+derive instance Generic (ReferrerPolicy) _
+derive instance Eq (ReferrerPolicy)
+instance Show (ReferrerPolicy) where show = genericShow
 
 newtype RetryAfter = RetryAfter (DateTime \/ Int)
 derive instance Newtype (RetryAfter) _
+derive instance Generic (RetryAfter) _
+instance Show (RetryAfter) where show = genericShow
 derive instance Eq (RetryAfter)
 
 newtype SecWebsocketKey = SecWebsocketKey String
 derive instance Newtype (SecWebsocketKey) _
+derive instance Generic (SecWebsocketKey) _
+instance Show (SecWebsocketKey) where show = genericShow
 derive instance Eq (SecWebsocketKey)
 
 newtype SecWebsocketAccept = SecWebsocketAccept SecWebsocketKey
 derive instance Newtype (SecWebsocketAccept) _
+derive instance Generic (SecWebsocketAccept) _
+instance Show (SecWebsocketAccept) where show = genericShow
 derive instance Eq (SecWebsocketAccept)
 
-newtype SecWebsocketVersion = SecWebsocketVersion (String \/ NonEmptyArray String)
+newtype SecWebsocketVersion = SecWebsocketVersion (NonEmptyArray Int)
 derive instance Newtype (SecWebsocketVersion) _
+derive instance Generic (SecWebsocketVersion) _
+instance Show (SecWebsocketVersion) where show = genericShow
 derive instance Eq (SecWebsocketVersion)
 
 newtype Server = Server String
 derive instance Newtype (Server) _
+derive instance Generic (Server) _
+instance Show (Server) where show = genericShow
 derive instance Eq (Server)
 
 newtype SetCookie = SetCookie String
 derive instance Newtype (SetCookie) _
+derive instance Generic (SetCookie) _
+instance Show (SetCookie) where show = genericShow
 derive instance Eq (SetCookie)
 
-newtype StrictTransportSecurity = StrictTransportSecurity {maxAge :: Int, includeSubdomains :: Boolean, preload :: Boolean}
+newtype StrictTransportSecurity = StrictTransportSecurity {maxAge :: Maybe Int, includeSubdomains :: Boolean}
 derive instance Newtype (StrictTransportSecurity) _
+derive instance Generic (StrictTransportSecurity) _
+instance Show (StrictTransportSecurity) where show = genericShow
 derive instance Eq (StrictTransportSecurity)
 
 newtype TE = TE String
 derive instance Newtype (TE) _
+derive instance Generic (TE) _
+instance Show (TE) where show = genericShow
 derive instance Eq (TE)
 
 newtype TransferEncoding = TransferEncoding String
 derive instance Newtype (TransferEncoding) _
+derive instance Generic (TransferEncoding) _
+instance Show (TransferEncoding) where show = genericShow
 derive instance Eq (TransferEncoding)
 
 newtype Upgrade = Upgrade (NonEmptyArray String)
 derive instance Newtype (Upgrade) _
+derive instance Generic (Upgrade) _
+instance Show (Upgrade) where show = genericShow
 derive instance Eq (Upgrade)
 
 newtype UserAgent = UserAgent String
 derive instance Newtype (UserAgent) _
+derive instance Generic (UserAgent) _
+instance Show (UserAgent) where show = genericShow
 derive instance Eq (UserAgent)
 
 newtype Vary = Vary (Wildcard \/ NonEmptyArray StringLower)
 derive instance Newtype (Vary) _
+derive instance Generic (Vary) _
+instance Show (Vary) where show = genericShow
 derive instance Eq (Vary)
 
 cacheControlDefaults :: Record CacheControl'
@@ -443,7 +586,7 @@ cacheControl a = CacheControl $ Record.merge a cacheControlDefaults
 
 instance TypedHeader (Accept String) where
   headerName = "Accept"
-  headerValueParser = Parse.String.rest <#> Accept
+  headerValueParser = Parse.rest <#> Accept
   headerValueEncode = unwrap
 instance TypedHeader (Accept MIME.MIME) where
   headerName = "Accept"
@@ -565,10 +708,6 @@ instance TypedHeader (Accept Type.MIME.Midi) where
   headerName = "Accept"
   headerValueParser = mimeParser >>= (Parse.liftMaybe (const $ "expected " <> MIME.toString (Type.MIME.value @Type.MIME.Midi)) <<< Type.MIME.fromValue) <#> Accept
   headerValueEncode _ = MIME.toString (Type.MIME.value @Type.MIME.Midi)
-instance TypedHeader (Accept Type.MIME.Mjs) where
-  headerName = "Accept"
-  headerValueParser = mimeParser >>= (Parse.liftMaybe (const $ "expected " <> MIME.toString (Type.MIME.value @Type.MIME.Mjs)) <<< Type.MIME.fromValue) <#> Accept
-  headerValueEncode _ = MIME.toString (Type.MIME.value @Type.MIME.Mjs)
 instance TypedHeader (Accept Type.MIME.Mp3) where
   headerName = "Accept"
   headerValueParser = mimeParser >>= (Parse.liftMaybe (const $ "expected " <> MIME.toString (Type.MIME.value @Type.MIME.Mp3)) <<< Type.MIME.fromValue) <#> Accept
@@ -740,7 +879,7 @@ instance TypedHeader (Accept Type.MIME.Archive7z) where
 
 instance TypedHeader (ContentType String) where
   headerName = "Content-Type"
-  headerValueParser = Parse.String.rest <#> ContentType
+  headerValueParser = Parse.rest <#> ContentType
   headerValueEncode = unwrap
 instance TypedHeader (ContentType MIME.MIME) where
   headerName = "Content-Type"
@@ -862,10 +1001,6 @@ instance TypedHeader (ContentType Type.MIME.Midi) where
   headerName = "Content-Type"
   headerValueParser = mimeParser >>= (Parse.liftMaybe (const $ "expected " <> MIME.toString (Type.MIME.value @Type.MIME.Midi)) <<< Type.MIME.fromValue) <#> ContentType
   headerValueEncode _ = MIME.toString (Type.MIME.value @Type.MIME.Midi)
-instance TypedHeader (ContentType Type.MIME.Mjs) where
-  headerName = "Content-Type"
-  headerValueParser = mimeParser >>= (Parse.liftMaybe (const $ "expected " <> MIME.toString (Type.MIME.value @Type.MIME.Mjs)) <<< Type.MIME.fromValue) <#> ContentType
-  headerValueEncode _ = MIME.toString (Type.MIME.value @Type.MIME.Mjs)
 instance TypedHeader (ContentType Type.MIME.Mp3) where
   headerName = "Content-Type"
   headerValueParser = mimeParser >>= (Parse.liftMaybe (const $ "expected " <> MIME.toString (Type.MIME.value @Type.MIME.Mp3)) <<< Type.MIME.fromValue) <#> ContentType
@@ -1037,7 +1172,7 @@ instance TypedHeader (ContentType Type.MIME.Archive7z) where
 
 instance TypedHeader AccessControlAllowCredentials where
   headerName = "Access-Control-Allow-Credentials"
-  headerValueParser = Parse.String.string "true" $> AccessControlAllowCredentials
+  headerValueParser = Parse.string "true" $> AccessControlAllowCredentials
   headerValueEncode _ = "true"
 
 instance TypedHeader AccessControlAllowHeaders where
@@ -1046,7 +1181,7 @@ instance TypedHeader AccessControlAllowHeaders where
     let
       headers = commas1 headerNameParser <#> Right <#> AccessControlAllowHeaders
     in
-      (wildcardParser $> AccessControlAllowHeaders (Left Wildcard)) <|> headers
+      Parse.try (wildcardParser $> AccessControlAllowHeaders (Left Wildcard)) <|> Parse.try headers
   headerValueEncode (AccessControlAllowHeaders (Left Wildcard)) = "*"
   headerValueEncode (AccessControlAllowHeaders (Right hs)) = hs <#> String.Lower.toString # Array.NonEmpty.intercalate ", "
 
@@ -1056,7 +1191,7 @@ instance TypedHeader AccessControlAllowMethods where
     let
       methods = commas1 methodParser <#> Right <#> AccessControlAllowMethods
     in
-      (wildcardParser $> AccessControlAllowMethods (Left Wildcard)) <|> methods
+      Parse.try (wildcardParser $> AccessControlAllowMethods (Left Wildcard)) <|> Parse.try methods
   headerValueEncode (AccessControlAllowMethods (Left Wildcard)) = "*"
   headerValueEncode (AccessControlAllowMethods (Right ms)) = ms <#> Method.toString # Array.NonEmpty.intercalate ", "
 
@@ -1064,9 +1199,9 @@ instance TypedHeader AccessControlAllowOrigin where
   headerName = "Access-Control-Allow-Origin"
   headerValueParser =
     let
-      str = Parse.String.rest <#> Right <#> AccessControlAllowOrigin
+      str = Parse.rest <#> String.trim <#> Right <#> AccessControlAllowOrigin
     in
-      (wildcardParser $> AccessControlAllowOrigin (Left Wildcard)) <|> str
+      Parse.try (wildcardParser $> AccessControlAllowOrigin (Left Wildcard)) <|> Parse.try str
   headerValueEncode (AccessControlAllowOrigin (Left Wildcard)) = "*"
   headerValueEncode (AccessControlAllowOrigin (Right a)) = a
 
@@ -1076,13 +1211,13 @@ instance TypedHeader AccessControlExposeHeaders where
     let
       str = commas headerNameParser <#> Right <#> AccessControlExposeHeaders
     in
-      (wildcardParser $> AccessControlExposeHeaders (Left Wildcard)) <|> str
+      Parse.try (wildcardParser $> AccessControlExposeHeaders (Left Wildcard)) <|> Parse.try str
   headerValueEncode (AccessControlExposeHeaders (Left Wildcard)) = "*"
   headerValueEncode (AccessControlExposeHeaders (Right hs)) = hs <#> String.Lower.toString # Array.intercalate ", "
 
 instance TypedHeader AccessControlMaxAge where
   headerName = "Access-Control-Max-Age"
-  headerValueParser = Parse.String.Basic.intDecimal <#> AccessControlMaxAge
+  headerValueParser = Parse.between Parse.whiteSpace Parse.whiteSpace Parse.intDecimal <#> AccessControlMaxAge
   headerValueEncode (AccessControlMaxAge i) = Int.toStringAs Int.decimal i
 
 instance TypedHeader AccessControlRequestHeaders where
@@ -1097,7 +1232,7 @@ instance TypedHeader AccessControlRequestMethod where
 
 instance TypedHeader Age where
   headerName = "Age"
-  headerValueParser = Parse.String.Basic.intDecimal <#> Age
+  headerValueParser = Parse.between Parse.whiteSpace Parse.whiteSpace Parse.intDecimal <#> Age
   headerValueEncode (Age i) = Int.toStringAs Int.decimal i
 
 instance TypedHeader Allow where
@@ -1109,9 +1244,9 @@ instance TypedHeader Authorization where
   headerName = "Authorization"
   headerValueParser =
     let
-      scheme = (Parse.String.anyTill (void Parse.String.Basic.space <|> Parse.String.eof) <#> fst <#> AuthScheme)
+      scheme = Parse.whiteSpace *> (Parse.anyTill (void (Parse.try Parse.space) <|> Parse.eof) <#> fst <#> String.trim <#> AuthScheme)
     in
-      pure Authorization <*> scheme <*> (Parse.String.rest <#> String.trim)
+      pure Authorization <*> scheme <*> (Parse.rest <#> String.trim)
   headerValueEncode (Authorization (AuthScheme s) v) = s <> " " <> v
 
 instance TypedHeader BasicAuth where
@@ -1130,7 +1265,7 @@ instance TypedHeader BearerAuth where
   headerName = "Authorization"
   headerValueParser = do
     Authorization (AuthScheme s) v <- headerValueParser @Authorization
-    when (String.toLower s /= "basic") $ Parse.fail $ "expected Authorization scheme to be Bearer, found " <> s
+    when (String.toLower s /= "bearer") $ Parse.fail $ "expected Authorization scheme to be Bearer, found " <> s
     pure $ BearerAuth v
   headerValueEncode (BearerAuth a) =
     headerValueEncode $ Authorization (AuthScheme "Bearer") a
@@ -1138,7 +1273,29 @@ instance TypedHeader BearerAuth where
 instance TypedHeader CacheControl where
   headerName = "Cache-Control"
   headerValueParser = do
-    directives <- commas1 directiveParser <#> map (\(k /\ v) -> String.Lower.toString k /\ v) <#> Map.fromFoldable
+    directives <- commas directiveParser <#> map (\(k /\ v) -> String.Lower.toString k /\ v) <#> Map.fromFoldable
+    let
+      keys =
+        [ "max-age"
+        , "max-stale"
+        , "min-fresh"
+        , "s-maxage"
+        , "no-cache"
+        , "no-store"
+        , "no-transform"
+        , "only-if-cached"
+        , "must-revalidate"
+        , "must-understand"
+        , "proxy-revalidate"
+        , "private"
+        , "public"
+        , "immutable"
+        , "stale-while-revalidate"
+        , "stale-if-error"
+        ]
+    when
+      (Map.keys directives # (Set.toUnfoldable :: _ (Array _)) # any (flip elem keys) # not)
+      (Parse.fail "no directives")
     pure $ CacheControl
       { maxAge: Map.lookup "max-age" directives # join >>= Int.fromString
   , maxStale: Map.lookup "max-stale" directives # join >>= Int.fromString
@@ -1190,7 +1347,7 @@ instance TypedHeader Connection where
     let
       close = closeRegexParser $> Connection (Left ConnectionClose)
     in
-      close <|> (commas1 headerNameParser <#> Right <#> Connection)
+      Parse.try close <|> (commas1 headerNameParser <#> Right <#> Connection)
   headerValueEncode (Connection (Left ConnectionClose)) = "close"
   headerValueEncode (Connection (Right as)) = as <#> String.Lower.toString # Array.NonEmpty.intercalate ", "
 
@@ -1198,24 +1355,26 @@ instance TypedHeader ContentDisposition where
   headerName = "Content-Disposition"
   headerValueParser =
     let
-      boundary = Parse.String.string ";" <|> (Parse.String.eof *> pure "")
-      inline = Parse.String.string "inline" *> boundary $> ContentDisposition (Either.Nested.in1 ContentDispositionInline)
+      boundary = Parse.whiteSpace *> (Parse.try (Parse.string ";") <|> Parse.try (Parse.eof *> pure ""))
+      inline = Parse.whiteSpace *> Parse.string "inline" *> boundary $> ContentDisposition (Either.Nested.in1 ContentDispositionInline)
       attachment = do
-        void $ Parse.String.string "attachment" *> boundary *> Parse.String.Basic.whiteSpace
-        directives <- commas1 directiveParser <#> map (\(k /\ v) -> String.Lower.toString k /\ v) <#> Map.fromFoldable
+        void $ Parse.whiteSpace *> Parse.string "attachment" *> boundary *> Parse.whiteSpace
+        directives <- semis directiveParser <#> map (\(k /\ v) -> String.Lower.toString k /\ v) <#> Map.fromFoldable
         let
           filename =
-            join (Map.lookup "filename" directives <|> Map.lookup "filename*" directives)
+            (Map.lookup "filename" directives <|> Map.lookup "filename*" directives)
+            # join
+            <#> Regex.replace quotesRe ""
         pure $ ContentDisposition $ Either.Nested.in2 $ ContentDispositionAttachment {filename}
       formData = do
-        void $ Parse.String.string "form-data" *> boundary *> Parse.String.Basic.whiteSpace
-        directives <- commas1 directiveParser <#> map (\(k /\ v) -> String.Lower.toString k /\ v) <#> Map.fromFoldable
+        void $ Parse.whiteSpace *> Parse.string "form-data" *> boundary *> Parse.whiteSpace
+        directives <- semis directiveParser <#> map (\(k /\ v) -> String.Lower.toString k /\ v) <#> Map.fromFoldable
         let
-          filename = join (Map.lookup "filename" directives)
-          name = join (Map.lookup "name" directives)
+          filename = Map.lookup "filename" directives # join <#> Regex.replace quotesRe ""
+          name = Map.lookup "name" directives # join <#> Regex.replace quotesRe ""
         pure $ ContentDisposition $ Either.Nested.in3 $ ContentDispositionFormData {filename, name}
     in
-      inline <|> attachment <|> formData
+      Parse.try inline <|> Parse.try attachment <|> Parse.try formData
   headerValueEncode (ContentDisposition a) =
     Either.Nested.either3
       (const $ [Just "inline"])
@@ -1228,18 +1387,18 @@ instance TypedHeader ContentDisposition where
 instance TypedHeader ContentEncoding where
   headerName = "Content-Encoding"
   headerValueParser =
-    commas1 (Parse.Combine.many Parse.String.Basic.alphaNum <#> Array.fromFoldable <#> String.CodeUnit.fromCharArray)
+    commas1 (Parse.whiteSpace *> (Parse.many Parse.alphaNum <#> Array.fromFoldable <#> String.CodeUnit.fromCharArray) <* Parse.whiteSpace)
       <#> ContentEncoding
   headerValueEncode (ContentEncoding as) = Array.NonEmpty.intercalate ", " as
 
 instance TypedHeader ContentLength where
   headerName = "Content-Length"
-  headerValueParser = Parse.String.Basic.intDecimal <#> ContentLength
+  headerValueParser = Parse.whiteSpace *> (Parse.intDecimal <#> ContentLength) <* Parse.whiteSpace
   headerValueEncode (ContentLength a) = Int.toStringAs Int.decimal a
 
 instance TypedHeader ContentLocation where
   headerName = "Content-Location"
-  headerValueParser = Parse.String.rest <#> ContentLocation
+  headerValueParser = Parse.rest <#> ContentLocation
   headerValueEncode (ContentLocation a) = a
 
 instance TypedHeader ContentRange where
@@ -1248,21 +1407,21 @@ instance TypedHeader ContentRange where
     let
       startEndSize =
         pure (\a b c -> a /\ b /\ c)
-        <*> ((Parse.String.Basic.intDecimal <#> ByteRangeStart) <* Parse.String.string "-")
-        <*> ((Parse.String.Basic.intDecimal <#> ByteRangeEnd) <* Parse.String.string "/")
-        <*> (Parse.String.Basic.intDecimal <#> ByteRangeLength)
+        <*> ((Parse.intDecimal <#> ByteRangeStart) <* Parse.string "-")
+        <*> ((Parse.intDecimal <#> ByteRangeEnd) <* Parse.string "/")
+        <*> (Parse.intDecimal <#> ByteRangeLength)
       startEnd =
         pure (\a b -> a /\ b)
-        <*> ((Parse.String.Basic.intDecimal <#> ByteRangeStart) <* Parse.String.string "-")
-        <*> ((Parse.String.Basic.intDecimal <#> ByteRangeEnd) <* Parse.String.string "/" <* wildcardParser)
+        <*> ((Parse.intDecimal <#> ByteRangeStart) <* Parse.string "-")
+        <*> ((Parse.intDecimal <#> ByteRangeEnd) <* Parse.string "/" <* wildcardParser)
       size =
         wildcardParser
-        *> Parse.String.string "/"
-        *> Parse.String.Basic.intDecimal <#> ByteRangeLength
+        *> Parse.string "/"
+        *> Parse.intDecimal <#> ByteRangeLength
     in
-      Parse.String.string "bytes"
-      *> Parse.String.Basic.whiteSpace
-      *> (startEndSize <#> Either.Nested.in1) <|> (startEnd <#> Either.Nested.in2) <|> (size <#> Either.Nested.in3)
+      Parse.string "bytes"
+      *> Parse.whiteSpace
+      *> Parse.try (startEndSize <#> Either.Nested.in1) <|> Parse.try (startEnd <#> Either.Nested.in2) <|> Parse.try (size <#> Either.Nested.in3)
       <#> ContentRange
   headerValueEncode (ContentRange a) =
     Either.Nested.either3
@@ -1274,7 +1433,7 @@ instance TypedHeader ContentRange where
 
 instance TypedHeader Cookie where
   headerName = "Cookie"
-  headerValueParser = Parse.String.rest <#> Cookie
+  headerValueParser = Parse.rest <#> Cookie
   headerValueEncode (Cookie a) = a
 
 instance TypedHeader Date where
@@ -1284,12 +1443,12 @@ instance TypedHeader Date where
 
 instance TypedHeader ETag where
   headerName = "ETag"
-  headerValueParser = Parse.String.rest <#> ETag
+  headerValueParser = Parse.rest <#> ETag
   headerValueEncode (ETag a) = a
 
 instance TypedHeader ExpectContinue where
   headerName = "Expect"
-  headerValueParser = Parse.String.string "100-continue" $> ExpectContinue
+  headerValueParser = Parse.string "100-continue" $> ExpectContinue
   headerValueEncode ExpectContinue = "100-continue"
 
 instance TypedHeader Expires where
@@ -1299,10 +1458,237 @@ instance TypedHeader Expires where
 
 instance TypedHeader Host where
   headerName = "Host"
-  headerValueParser = Parse.String.rest <#> Host
+  headerValueParser = Parse.rest <#> Host
   headerValueEncode (Host a) = a
+
+instance TypedHeader IfMatch where
+  headerName = "If-Match"
+  headerValueParser =
+    let
+      wild = wildcardParser <#> Left <#> IfMatch
+      etag =
+        Parse.whiteSpace
+        *> Parse.optional (Parse.string "W/")
+        *> Parse.string "\""
+        *> (Parse.anyTill (void $ Parse.string "\"") <#> fst)
+        <* Parse.whiteSpace
+      etags = commas1 etag <#> Right <#> IfMatch
+    in
+      Parse.try wild <|> Parse.try etags
+  headerValueEncode (IfMatch (Left Wildcard)) = "*"
+  headerValueEncode (IfMatch (Right as)) = as <#> (\a -> "\"" <> a <> "\"") # Array.NonEmpty.intercalate ", "
+
+instance TypedHeader IfNoneMatch where
+  headerName = "If-None-Match"
+  headerValueParser =
+    let
+      wild = wildcardParser <#> Left <#> IfNoneMatch
+      etag a =
+        Parse.string "\""
+        *> (Parse.anyTill (void $ Parse.string "\"") <#> fst <#> a)
+      weakEtag =
+        Parse.whiteSpace
+        *> Parse.string "W/"
+        *> etag MatchETagWeak
+        <* Parse.whiteSpace
+      strongEtag =
+        Parse.whiteSpace
+        *> Parse.string "W/"
+        *> etag MatchETag
+        <* Parse.whiteSpace
+      etags = commas1 (Parse.try weakEtag <|> strongEtag) <#> Right <#> IfNoneMatch
+    in
+      Parse.try wild <|> Parse.try etags
+  headerValueEncode (IfNoneMatch (Left Wildcard)) = "*"
+  headerValueEncode (IfNoneMatch (Right as)) =
+    as
+    <#> ( case _ of
+            MatchETag a -> "\"" <> a <> "\""
+            MatchETagWeak a -> "W/\"" <> a <> "\""
+        )
+    # Array.NonEmpty.intercalate ", "
+
+instance TypedHeader IfModifiedSince where
+  headerName = "If-Modified-Since"
+  headerValueParser = datetimeParser <#> IfModifiedSince
+  headerValueEncode (IfModifiedSince a) = printDateTime a
+
+instance TypedHeader IfRange where
+  headerName = "If-Modified-Since"
+  headerValueParser =
+    let
+      dt = datetimeParser <#> Left <#> IfRange
+      etag =
+        Parse.whiteSpace
+        *> Parse.string "\""
+        *> Parse.anyTill (Parse.string "\"")
+        <* Parse.whiteSpace
+        <#> fst
+        <#> Right
+        <#> IfRange
+    in
+      Parse.try dt <|> Parse.try etag
+  headerValueEncode (IfRange (Left a)) = printDateTime a
+  headerValueEncode (IfRange (Right a)) = "\"" <> a <> "\""
+
+instance TypedHeader IfUnmodifiedSince where
+  headerName = "If-Unmodified-Since"
+  headerValueParser = datetimeParser <#> IfUnmodifiedSince
+  headerValueEncode (IfUnmodifiedSince a) = printDateTime a
+
+instance TypedHeader LastModified where
+  headerName = "Last-Modified"
+  headerValueParser = datetimeParser <#> LastModified 
+  headerValueEncode (LastModified a) = printDateTime a
 
 instance TypedHeader Origin where
   headerName = "Origin"
-  headerValueParser = Parse.String.rest <#> Origin
+  headerValueParser = Parse.rest <#> Origin
   headerValueEncode (Origin a) = a
+
+instance TypedHeader ProxyAuthorization where
+  headerName = "Proxy-Authorization"
+  headerValueParser =
+    let
+      scheme = (Parse.anyTill (void (Parse.try Parse.space) <|> Parse.eof) <#> fst <#> AuthScheme)
+    in
+      pure ProxyAuthorization <*> scheme <*> (Parse.rest <#> String.trim)
+  headerValueEncode (ProxyAuthorization (AuthScheme s) v) = s <> " " <> v
+
+instance TypedHeader Range where
+  headerName = "Range"
+  headerValueParser =
+    let
+      int = Parse.intDecimal
+      dash = Parse.string "-"
+      rangeSpecStart = int <* dash <#> ByteRangeStart
+      rangeSpecStartEnd = pure (\a b -> a /\ b) <*> (int <* dash <#> ByteRangeStart) <*> (int <#> ByteRangeEnd)
+      rangeSpecSuffix = dash *> int <#> ByteRangeLength
+      rangeSpec =
+        Parse.try (rangeSpecStartEnd <#> Either.Nested.in2)
+        <|> Parse.try (rangeSpecSuffix <#> Either.Nested.in3)
+        <|> (rangeSpecStart <#> Either.Nested.in1)
+    in
+      commas1 rangeSpec <#> Range
+  headerValueEncode (Range as) =
+    as
+    <#> (
+      Either.Nested.either3
+        (\(ByteRangeStart a) -> Int.toStringAs Int.decimal a <> "-")
+        (\(ByteRangeStart a /\ ByteRangeEnd b) -> Int.toStringAs Int.decimal a <> "-" <> Int.toStringAs Int.decimal b)
+        (\(ByteRangeLength b) -> "-" <> Int.toStringAs Int.decimal b)
+    )
+    # Array.NonEmpty.intercalate ", "
+
+instance TypedHeader Referer where
+  headerName = "Referer"
+  headerValueParser = Parse.rest <#> Referer
+  headerValueEncode (Referer a) = a
+
+instance TypedHeader ReferrerPolicy where
+  headerName = "Referrer-Policy"
+  headerValueParser =
+    let
+      noReferrer = Parse.string "no-referrer" $> ReferrerPolicyNoReferrer
+      noReferrerWhenDowngrade = Parse.string "no-referrer-when-downgrade" $> ReferrerPolicyNoReferrerWhenDowngrade
+      origin = Parse.string "origin" $> ReferrerPolicyOrigin
+      originWhenCrossOrigin = Parse.string "origin-when-cross-origin" $> ReferrerPolicyOriginWhenCrossOrigin
+      sameOrigin = Parse.string "same-origin" $> ReferrerPolicySameOrigin
+      strictOrigin = Parse.string "strict-origin" $> ReferrerPolicyStrictOrigin
+      strictOriginWhenCrossOrigin = Parse.string "strict-origin-when-cross-origin" $> ReferrerPolicyStrictOriginWhenCrossOrigin
+      unsafeURL = Parse.string "unsafe-url" $> ReferrerPolicyUnsafeURL
+    in
+      Parse.try noReferrer
+      <|> Parse.try noReferrerWhenDowngrade
+      <|> Parse.try origin
+      <|> Parse.try originWhenCrossOrigin
+      <|> Parse.try sameOrigin
+      <|> Parse.try strictOrigin
+      <|> Parse.try strictOriginWhenCrossOrigin
+      <|> unsafeURL
+  headerValueEncode ReferrerPolicyNoReferrer = "no-referrer"
+  headerValueEncode ReferrerPolicyNoReferrerWhenDowngrade = "no-referrer-when-downgrade"
+  headerValueEncode ReferrerPolicyOrigin = "origin"
+  headerValueEncode ReferrerPolicyOriginWhenCrossOrigin = "origin-when-cross-origin"
+  headerValueEncode ReferrerPolicySameOrigin = "same-origin"
+  headerValueEncode ReferrerPolicyStrictOrigin = "strict-origin"
+  headerValueEncode ReferrerPolicyStrictOriginWhenCrossOrigin = "strict-origin-when-cross-origin"
+  headerValueEncode ReferrerPolicyUnsafeURL = "unsafe-url"
+
+instance TypedHeader RetryAfter where
+  headerName = "Retry-After"
+  headerValueParser = Parse.try (datetimeParser <#> Left <#> RetryAfter) <|> Parse.try (Parse.intDecimal <#> Right <#> RetryAfter)
+  headerValueEncode (RetryAfter (Left a)) = printDateTime a
+  headerValueEncode (RetryAfter (Right a)) = Int.toStringAs Int.decimal a
+
+instance TypedHeader SecWebsocketKey where
+  headerName = "Sec-WebSocket-Key"
+  headerValueParser = Parse.rest <#> SecWebsocketKey
+  headerValueEncode (SecWebsocketKey a) = a
+
+instance TypedHeader SecWebsocketAccept where
+  headerName = "Sec-WebSocket-Accept"
+  headerValueParser = headerValueParser <#> SecWebsocketAccept
+  headerValueEncode (SecWebsocketAccept a) = headerValueEncode a
+
+instance TypedHeader SecWebsocketVersion where
+  headerName = "Sec-WebSocket-Version"
+  headerValueParser = commas1 (Parse.intDecimal) <#> SecWebsocketVersion
+  headerValueEncode (SecWebsocketVersion as) = as <#> Int.toStringAs Int.decimal # Array.NonEmpty.intercalate ", "
+
+instance TypedHeader Server where
+  headerName = "Server"
+  headerValueParser = Parse.rest <#> Server
+  headerValueEncode (Server a) = a
+
+instance TypedHeader SetCookie where
+  headerName = "Set-Cookie"
+  headerValueParser = Parse.rest <#> SetCookie
+  headerValueEncode (SetCookie a) = a
+
+instance TypedHeader StrictTransportSecurity where
+  headerName = "Strict-Transport-Security"
+  headerValueParser = do
+    directives <- commas1 directiveParser <#> map (\(k /\ v) -> String.Lower.toString k /\ v) <#> Map.fromFoldable
+    pure $ StrictTransportSecurity
+      { maxAge: Map.lookup "max-age" directives # join >>= Int.fromString
+      , includeSubdomains: Map.lookup "includesubdomains" directives # isJust
+      }
+  headerValueEncode (StrictTransportSecurity a) =
+    let
+      flag v k
+        | v = Just k
+        | otherwise = Nothing
+      int (Just i) k = Just (k <> "=" <> Int.toStringAs Int.decimal i)
+      int Nothing _ = Nothing
+    in
+      Array.intercalate ", " $ Array.catMaybes
+      [ int a.maxAge "max-age"
+      , flag a.includeSubdomains "includeSubDomains"
+      ]
+
+instance TypedHeader TE where
+  headerName = "TE"
+  headerValueParser = Parse.rest <#> TE
+  headerValueEncode (TE a) = a
+
+instance TypedHeader TransferEncoding where
+  headerName = "Transfer-Encoding"
+  headerValueParser = Parse.rest <#> TransferEncoding
+  headerValueEncode (TransferEncoding a) = a
+
+instance TypedHeader Upgrade where
+  headerName = "Upgrade"
+  headerValueParser = commas1 (Parse.anyTill Parse.space <#> fst) <#> Upgrade
+  headerValueEncode (Upgrade as) = as # Array.NonEmpty.intercalate ", "
+
+instance TypedHeader UserAgent where
+  headerName = "User-Agent"
+  headerValueParser = Parse.rest <#> UserAgent
+  headerValueEncode (UserAgent a) = a
+
+instance TypedHeader Vary where
+  headerName = "Vary"
+  headerValueParser = Parse.try (wildcardParser <#> Left <#> Vary) <|> Parse.try (commas1 headerNameParser <#> Right <#> Vary)
+  headerValueEncode (Vary (Left _)) = "*"
+  headerValueEncode (Vary (Right a)) = a <#> String.Lower.toString # Array.NonEmpty.intercalate ", "

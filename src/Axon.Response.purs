@@ -15,7 +15,7 @@ module Axon.Response
 import Prelude
 
 import Axon.Response.Body (Body(..))
-import Axon.Response.Body (Body(..), formBody) as Body
+import Axon.Response.Body (Body(..)) as Body
 import Data.FoldableWithIndex (foldlWithIndex)
 import Data.Generic.Rep (class Generic)
 import Data.Map (Map)

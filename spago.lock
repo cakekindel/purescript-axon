@@ -20,6 +20,7 @@
             {
               "arrays": ">=7.3.0 <8.0.0"
             },
+            "b64",
             {
               "bifunctors": ">=6.0.0 <7.0.0"
             },
@@ -37,9 +38,6 @@
             },
             {
               "exceptions": ">=6.1.0 <7.0.0"
-            },
-            {
-              "ezfetch": ">=1.1.0 <2.0.0"
             },
             {
               "foldable-traversable": ">=6.0.0 <7.0.0"
@@ -96,7 +94,6 @@
           ],
           "build_plan": [
             "aff",
-            "aff-promise",
             "argonaut-codecs",
             "argonaut-core",
             "arraybuffer-types",
@@ -115,7 +112,6 @@
             "enums",
             "exceptions",
             "exists",
-            "ezfetch",
             "filterable",
             "foldable-traversable",
             "foreign",
@@ -131,7 +127,6 @@
             "lazy",
             "lists",
             "maybe",
-            "media-types",
             "newtype",
             "node-buffer",
             "node-event-emitter",
@@ -168,9 +163,6 @@
             "unsafe-coerce",
             "url-immutable",
             "variant",
-            "web-dom",
-            "web-events",
-            "web-file",
             "web-streams"
           ]
         },
@@ -800,15 +792,6 @@
         "unsafe-coerce"
       ]
     },
-    "aff-promise": {
-      "type": "registry",
-      "version": "4.0.0",
-      "integrity": "sha256-Kq5EupbUpXeUXx4JqGQE7/RTTz/H6idzWhsocwlEFhM=",
-      "dependencies": [
-        "aff",
-        "foreign"
-      ]
-    },
     "ansi": {
       "type": "registry",
       "version": "7.0.0",
@@ -1088,42 +1071,6 @@
         "enums"
       ]
     },
-    "ezfetch": {
-      "type": "registry",
-      "version": "1.1.0",
-      "integrity": "sha256-EA8KHFS6PMuOdZiFt7h0E5D5yCf7/sWAfsRJoCE/xP8=",
-      "dependencies": [
-        "aff",
-        "aff-promise",
-        "arraybuffer-types",
-        "b64",
-        "bifunctors",
-        "effect",
-        "either",
-        "exceptions",
-        "foldable-traversable",
-        "foreign",
-        "foreign-object",
-        "integers",
-        "maybe",
-        "newtype",
-        "node-buffer",
-        "node-streams",
-        "nullable",
-        "numbers",
-        "ordered-collections",
-        "prelude",
-        "record",
-        "simple-json",
-        "transformers",
-        "tuples",
-        "typelevel-prelude",
-        "unsafe-coerce",
-        "url-immutable",
-        "web-file",
-        "web-streams"
-      ]
-    },
     "filterable": {
       "type": "registry",
       "version": "5.0.0",
@@ -1357,15 +1304,6 @@
       "dependencies": [
         "control",
         "invariant",
-        "newtype",
-        "prelude"
-      ]
-    },
-    "media-types": {
-      "type": "registry",
-      "version": "6.0.0",
-      "integrity": "sha256-n/4FoGBasbVSYscGVRSyBunQ6CZbL3jsYL+Lp01mc9k=",
-      "dependencies": [
         "newtype",
         "prelude"
       ]
@@ -2015,35 +1953,6 @@
         "record",
         "tuples",
         "unsafe-coerce"
-      ]
-    },
-    "web-dom": {
-      "type": "registry",
-      "version": "6.0.0",
-      "integrity": "sha256-1kSKWFDI4LupdmpjK01b1MMxDFW7jvatEgPgVmCmSBQ=",
-      "dependencies": [
-        "web-events"
-      ]
-    },
-    "web-events": {
-      "type": "registry",
-      "version": "4.0.0",
-      "integrity": "sha256-YDt8b6u1tzGtnWyNRodne57iO8FNSGPaTCVzBUyUn4k=",
-      "dependencies": [
-        "datetime",
-        "enums",
-        "foreign",
-        "nullable"
-      ]
-    },
-    "web-file": {
-      "type": "registry",
-      "version": "4.0.0",
-      "integrity": "sha256-1h5jPBkvjY71jLEdwVadXCx86/2inNoMBO//Rd3eCSU=",
-      "dependencies": [
-        "foreign",
-        "media-types",
-        "web-dom"
       ]
     },
     "web-streams": {

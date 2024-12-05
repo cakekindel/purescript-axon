@@ -301,16 +301,6 @@ instance TypelevelMIME Midi where
   fromValue _ = Nothing
   value = MIME.Midi
   
-data Mjs = Mjs
-derive instance Generic Mjs _
-derive instance Eq Mjs
-instance Show Mjs where
-  show = genericShow
-instance TypelevelMIME Mjs where
-  fromValue MIME.Mjs = Just Mjs
-  fromValue _ = Nothing
-  value = MIME.Mjs
-  
 data Mp3 = Mp3
 derive instance Generic Mp3 _
 derive instance Eq Mp3

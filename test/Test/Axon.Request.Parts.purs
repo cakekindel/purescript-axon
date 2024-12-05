@@ -2,19 +2,20 @@ module Test.Axon.Request.Parts where
 
 import Prelude
 
-import Axon.Header.Typed (ContentType(..))
+import Axon.Header.Typed (ContentType)
 import Axon.Request (Request)
 import Axon.Request as Request
 import Axon.Request.Method (Method(..))
-import Axon.Request.Parts.Class (Header(..), Json(..), Patch(..), Path(..), Post(..), extractRequestParts)
+import Axon.Request.Parts.Class (ExtractError(..), Header, Json(..), Patch, Path(..), Post(..), extractRequestParts, invokeHandler)
 import Axon.Request.Parts.Path (type (/), IgnoreRest)
-import Control.Monad.Error.Class (liftEither, liftMaybe)
+import Control.Monad.Error.Class (liftEither)
 import Data.Bifunctor (lmap)
 import Data.Either (Either(..))
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromJust)
+import Data.Maybe (fromJust)
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.URL as URL
+import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Effect.Exception (error)
 import Effect.Unsafe (unsafePerformEffect)
@@ -38,9 +39,8 @@ spec = describe "Parts" do
           { address: "127.0.0.1", port: 81 }
       , method: GET
       }
-    void $ extractRequestParts @Request req <#> lmap (error <<< show)
-      >>= liftEither
-      >>= liftMaybe (error "was nothing")
+    _ :: Request <- invokeHandler req (pure @Aff) <#> lmap (error <<< show) >>= liftEither
+    pure unit
 
   it "extracts header, method, path, JSON body" do
     stream <- Buffer.fromString """{"firstName": "henry"}""" UTF8
@@ -55,12 +55,24 @@ spec = describe "Parts" do
           { address: "127.0.0.1", port: 81 }
       , method: PATCH
       }
-    a <-
-      extractRequestParts
-        @(Patch /\ Header (ContentType MIME.Json) /\ (Path ("users" / Int) _) /\ Json { firstName :: String })
-        req <#> lmap (error <<< show) >>= liftEither >>= liftMaybe
-        (error "was nothing")
-    a `shouldEqual` (Patch /\ Header (ContentType MIME.Json) /\ Path 12 /\ Json { firstName: "henry" })
+
+    let
+      handler ::
+        Patch ->
+        Header (ContentType MIME.Json) ->
+        Path ("users" / Int) Int ->
+        Json { firstName :: String } ->
+        Aff String
+      handler _ _ (Path id) (Json {firstName}) = do
+        id `shouldEqual` 12
+        firstName `shouldEqual` "henry"
+        pure firstName
+
+    name <- invokeHandler req handler
+      <#> lmap (error <<< show)
+      >>= liftEither
+
+    name `shouldEqual` "henry"
 
   describe "Path" do
     it "matches a route matching literal" do
@@ -74,7 +86,6 @@ spec = describe "Parts" do
         }
       a <- extractRequestParts @(Path "foo" _) req <#> lmap (error <<< show)
         >>= liftEither
-        >>= liftMaybe (error "was nothing")
       a `shouldEqual` (Path unit)
 
     it "matches a route matching multiple literals" do
@@ -90,7 +101,6 @@ spec = describe "Parts" do
       a <- extractRequestParts @(Path ("foo" / "bar" / "baz") _) req
         <#> lmap (error <<< show)
         >>= liftEither
-        >>= liftMaybe (error "was nothing")
       a `shouldEqual` (Path unit)
 
     it "does not partially match a route ..." do
@@ -104,9 +114,7 @@ spec = describe "Parts" do
         , method: GET
         }
       a <- extractRequestParts @(Path ("foo" / "bar") _) req
-        <#> lmap (error <<< show)
-        >>= liftEither
-      a `shouldEqual` Nothing
+      a `shouldEqual` (Left ExtractNext)
 
     it "... but does if ends in IgnoreRest" do
       req <- liftEffect $ Request.make
@@ -121,7 +129,6 @@ spec = describe "Parts" do
       a <- extractRequestParts @(Path ("foo" / "bar" / IgnoreRest) _) req
         <#> lmap (error <<< show)
         >>= liftEither
-        >>= liftMaybe (error "was nothing")
       a `shouldEqual` (Path unit)
 
     it "extracts an int" do
@@ -137,7 +144,6 @@ spec = describe "Parts" do
       a <- extractRequestParts @(Path ("foo" / Int / "bar") _) req
         <#> lmap (error <<< show)
         >>= liftEither
-        >>= liftMaybe (error "was nothing")
       a `shouldEqual` (Path 123)
 
     it "extracts an int and a string" do
@@ -153,7 +159,6 @@ spec = describe "Parts" do
       a <- extractRequestParts @(Path ("foo" / Int / "bar" / String) _) req
         <#> lmap (error <<< show)
         >>= liftEither
-        >>= liftMaybe (error "was nothing")
       a `shouldEqual` (Path $ 123 /\ "baz")
 
   describe "Body" do
@@ -169,7 +174,6 @@ spec = describe "Parts" do
       a <- extractRequestParts @(Either Request.BodyStringError String) req
         <#> lmap (error <<< show)
         >>= liftEither
-        >>= liftMaybe (error "was nothing")
       a `shouldEqual` (Right "foo")
 
     it "extracts a string body from a readable stream" do
@@ -186,12 +190,10 @@ spec = describe "Parts" do
       a <- extractRequestParts @(Either Request.BodyStringError String) req
         <#> lmap (error <<< show)
         >>= liftEither
-        >>= liftMaybe (error "was nothing")
       a `shouldEqual` (Right "foo")
 
       a' <- extractRequestParts @String req <#> lmap (error <<< show)
         >>= liftEither
-        >>= liftMaybe (error "was nothing")
       a' `shouldEqual` "foo"
 
     it "extracts a string body from a buffer" do
@@ -207,12 +209,10 @@ spec = describe "Parts" do
       a <- extractRequestParts @(Either Request.BodyStringError String) req
         <#> lmap (error <<< show)
         >>= liftEither
-        >>= liftMaybe (error "was nothing")
       a `shouldEqual` (Right "foo")
 
       a' <- extractRequestParts @String req <#> lmap (error <<< show)
         >>= liftEither
-        >>= liftMaybe (error "was nothing")
       a' `shouldEqual` "foo"
 
     it "extracts a JSON body" do
@@ -230,5 +230,4 @@ spec = describe "Parts" do
       a <- extractRequestParts @(Post /\ Json { foo :: Int, bar :: String }) req
         <#> lmap (error <<< show)
         >>= liftEither
-        >>= liftMaybe (error "was nothing")
       a `shouldEqual` (Post /\ Json { foo: 123, bar: "abc" })
