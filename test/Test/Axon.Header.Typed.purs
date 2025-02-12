@@ -2,7 +2,43 @@ module Test.Axon.Header.Typed where
 
 import Prelude
 
-import Axon.Header.Typed (class TypedHeader, Accept(..), AccessControlAllowCredentials(..), AccessControlAllowHeaders(..), AccessControlAllowMethods(..), AccessControlAllowOrigin(..), AccessControlExposeHeaders(..), AccessControlMaxAge(..), AccessControlRequestHeaders(..), AccessControlRequestMethod(..), Age(..), Allow(..), AuthScheme(..), Authorization(..), BasicAuth(..), BearerAuth(..), ByteRangeEnd(..), ByteRangeLength(..), ByteRangeStart(..), CacheControl(..), Connection(..), ConnectionClose(..), ContentDisposition(..), ContentDispositionAttachment(..), ContentDispositionFormData(..), ContentDispositionInline(..), ContentEncoding(..), ContentLength(..), ContentLocation(..), ContentRange(..), ContentType(..), Cookie(..), Wildcard(..), cacheControlDefaults, headerValueParser)
+import Axon.Header.Typed
+  ( class TypedHeader
+  , Accept(..)
+  , AccessControlAllowCredentials(..)
+  , AccessControlAllowHeaders(..)
+  , AccessControlAllowMethods(..)
+  , AccessControlAllowOrigin(..)
+  , AccessControlExposeHeaders(..)
+  , AccessControlMaxAge(..)
+  , AccessControlRequestHeaders(..)
+  , AccessControlRequestMethod(..)
+  , Age(..)
+  , Allow(..)
+  , AuthScheme(..)
+  , Authorization(..)
+  , BasicAuth(..)
+  , BearerAuth(..)
+  , ByteRangeEnd(..)
+  , ByteRangeLength(..)
+  , ByteRangeStart(..)
+  , CacheControl(..)
+  , Connection(..)
+  , ConnectionClose(..)
+  , ContentDisposition(..)
+  , ContentDispositionAttachment(..)
+  , ContentDispositionFormData(..)
+  , ContentDispositionInline(..)
+  , ContentEncoding(..)
+  , ContentLength(..)
+  , ContentLocation(..)
+  , ContentRange(..)
+  , ContentType(..)
+  , Cookie(..)
+  , Wildcard(..)
+  , cacheControlDefaults
+  , headerValueParser
+  )
 import Axon.Request.Method (Method(..))
 import Control.Monad.Error.Class (liftEither)
 import Data.Bifunctor (lmap)
@@ -20,7 +56,8 @@ import Type.MIME as Type.MIME
 
 is :: forall h. Eq h => Show h => TypedHeader h => String -> h -> Spec Unit
 is i exp = it ("parses " <> show i) do
-  act <- runParser i (headerValueParser @h) # lmap (error <<< parseErrorMessage) # liftEither
+  act <- runParser i (headerValueParser @h) # lmap (error <<< parseErrorMessage)
+    # liftEither
   act `shouldEqual` exp
 
 isnt :: forall h. Eq h => Show h => TypedHeader h => String -> h -> Spec Unit
@@ -38,7 +75,8 @@ spec =
     describe "Accept MIME.MIME" do
       "application/json" `is` (Accept MIME.Json)
       "text/plain" `is` (Accept MIME.Txt)
-      "text/plain;charset=utf8" `is` (Accept $ MIME.Other "text/plain;charset=utf8")
+      "text/plain;charset=utf8" `is`
+        (Accept $ MIME.Other "text/plain;charset=utf8")
       "foo" `is` (Accept $ MIME.Other "foo")
     describe "Accept Aac" do
       "unknown" `isnt` Accept Type.MIME.Aac
@@ -87,7 +125,8 @@ spec =
       "application/msword" `is` Accept Type.MIME.Doc
     describe "Accept Docx" do
       "unknown" `isnt` Accept Type.MIME.Docx
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document" `is` Accept Type.MIME.Docx
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        `is` Accept Type.MIME.Docx
     describe "Accept Eot" do
       "unknown" `isnt` Accept Type.MIME.Eot
       "application/vnd.ms-fontobject" `is` Accept Type.MIME.Eot
@@ -141,7 +180,8 @@ spec =
       "application/vnd.apple.installer+xml" `is` Accept Type.MIME.Mpkg
     describe "Accept Odp" do
       "unknown" `isnt` Accept Type.MIME.Odp
-      "application/vnd.oasis.opendocument.presentation" `is` Accept Type.MIME.Odp
+      "application/vnd.oasis.opendocument.presentation" `is` Accept
+        Type.MIME.Odp
     describe "Accept Ods" do
       "unknown" `isnt` Accept Type.MIME.Ods
       "application/vnd.oasis.opendocument.spreadsheet" `is` Accept Type.MIME.Ods
@@ -177,7 +217,8 @@ spec =
       "application/vnd.ms-powerpoint" `is` Accept Type.MIME.Ppt
     describe "Accept Pptx" do
       "unknown" `isnt` Accept Type.MIME.Pptx
-      "application/vnd.openxmlformats-officedocument.presentationml.presentation" `is` Accept Type.MIME.Pptx
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        `is` Accept Type.MIME.Pptx
     describe "Accept Rar" do
       "unknown" `isnt` Accept Type.MIME.Rar
       "application/vnd.rar" `is` Accept Type.MIME.Rar
@@ -234,7 +275,8 @@ spec =
       "application/vnd.ms-excel" `is` Accept Type.MIME.Xls
     describe "Accept Xlsx" do
       "unknown" `isnt` Accept Type.MIME.Xlsx
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" `is` Accept Type.MIME.Xlsx
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" `is`
+        Accept Type.MIME.Xlsx
     describe "Accept Xml" do
       "unknown" `isnt` Accept Type.MIME.Xml
       "application/xml" `is` Accept Type.MIME.Xml
@@ -259,7 +301,8 @@ spec =
     describe "ContentType MIME.MIME" do
       "application/json" `is` (ContentType MIME.Json)
       "text/plain" `is` (ContentType MIME.Txt)
-      "text/plain;charset=utf8" `is` (ContentType $ MIME.Other "text/plain;charset=utf8")
+      "text/plain;charset=utf8" `is`
+        (ContentType $ MIME.Other "text/plain;charset=utf8")
       "foo" `is` (ContentType $ MIME.Other "foo")
     describe "ContentType Aac" do
       "unknown" `isnt` ContentType Type.MIME.Aac
@@ -308,7 +351,8 @@ spec =
       "application/msword" `is` ContentType Type.MIME.Doc
     describe "ContentType Docx" do
       "unknown" `isnt` ContentType Type.MIME.Docx
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document" `is` ContentType Type.MIME.Docx
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        `is` ContentType Type.MIME.Docx
     describe "ContentType Eot" do
       "unknown" `isnt` ContentType Type.MIME.Eot
       "application/vnd.ms-fontobject" `is` ContentType Type.MIME.Eot
@@ -362,10 +406,12 @@ spec =
       "application/vnd.apple.installer+xml" `is` ContentType Type.MIME.Mpkg
     describe "ContentType Odp" do
       "unknown" `isnt` ContentType Type.MIME.Odp
-      "application/vnd.oasis.opendocument.presentation" `is` ContentType Type.MIME.Odp
+      "application/vnd.oasis.opendocument.presentation" `is` ContentType
+        Type.MIME.Odp
     describe "ContentType Ods" do
       "unknown" `isnt` ContentType Type.MIME.Ods
-      "application/vnd.oasis.opendocument.spreadsheet" `is` ContentType Type.MIME.Ods
+      "application/vnd.oasis.opendocument.spreadsheet" `is` ContentType
+        Type.MIME.Ods
     describe "ContentType Odt" do
       "unknown" `isnt` ContentType Type.MIME.Odt
       "application/vnd.oasis.opendocument.text" `is` ContentType Type.MIME.Odt
@@ -398,7 +444,8 @@ spec =
       "application/vnd.ms-powerpoint" `is` ContentType Type.MIME.Ppt
     describe "ContentType Pptx" do
       "unknown" `isnt` ContentType Type.MIME.Pptx
-      "application/vnd.openxmlformats-officedocument.presentationml.presentation" `is` ContentType Type.MIME.Pptx
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        `is` ContentType Type.MIME.Pptx
     describe "ContentType Rar" do
       "unknown" `isnt` ContentType Type.MIME.Rar
       "application/vnd.rar" `is` ContentType Type.MIME.Rar
@@ -455,7 +502,8 @@ spec =
       "application/vnd.ms-excel" `is` ContentType Type.MIME.Xls
     describe "ContentType Xlsx" do
       "unknown" `isnt` ContentType Type.MIME.Xlsx
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" `is` ContentType Type.MIME.Xlsx
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" `is`
+        ContentType Type.MIME.Xlsx
     describe "ContentType Xml" do
       "unknown" `isnt` ContentType Type.MIME.Xml
       "application/xml" `is` ContentType Type.MIME.Xml
@@ -482,43 +530,65 @@ spec =
       "*" `is` AccessControlAllowHeaders (Left Wildcard)
       " * " `is` AccessControlAllowHeaders (Left Wildcard)
       "* " `is` AccessControlAllowHeaders (Left Wildcard)
-      "Vary" `is` AccessControlAllowHeaders (Right $ pure $ String.Lower.fromString "Vary")
-      " Vary" `isnt` AccessControlAllowHeaders (Right $ pure $ String.Lower.fromString "Vary")
-      "Vary  " `isnt` AccessControlAllowHeaders (Right $ pure $ String.Lower.fromString "Vary")
-      "Vary,   " `is` AccessControlAllowHeaders (Right $ pure $ String.Lower.fromString "Vary")
-      "Accept, Vary, Content-Type" `is` AccessControlAllowHeaders (Right $ (pure "Accept" <> pure "Vary" <> pure "Content-Type") <#> String.Lower.fromString)
+      "Vary" `is` AccessControlAllowHeaders
+        (Right $ pure $ String.Lower.fromString "Vary")
+      " Vary" `isnt` AccessControlAllowHeaders
+        (Right $ pure $ String.Lower.fromString "Vary")
+      "Vary  " `isnt` AccessControlAllowHeaders
+        (Right $ pure $ String.Lower.fromString "Vary")
+      "Vary,   " `is` AccessControlAllowHeaders
+        (Right $ pure $ String.Lower.fromString "Vary")
+      "Accept, Vary, Content-Type" `is` AccessControlAllowHeaders
+        ( Right $ (pure "Accept" <> pure "Vary" <> pure "Content-Type") <#>
+            String.Lower.fromString
+        )
     describe "AccessControlAllowMethods" do
       "*" `is` AccessControlAllowMethods (Left Wildcard)
       " * " `is` AccessControlAllowMethods (Left Wildcard)
       "* " `is` AccessControlAllowMethods (Left Wildcard)
       "GET" `is` AccessControlAllowMethods (Right $ pure GET)
       "get" `isnt` AccessControlAllowMethods (Right $ pure GET)
-      "GET,,,,,, PATCH" `is` AccessControlAllowMethods (Right $ pure GET <> pure PATCH)
-      "   GET    ,     PATCH    " `isnt` AccessControlAllowMethods (Right $ pure GET <> pure PATCH)
+      "GET,,,,,, PATCH" `is` AccessControlAllowMethods
+        (Right $ pure GET <> pure PATCH)
+      "   GET    ,     PATCH    " `isnt` AccessControlAllowMethods
+        (Right $ pure GET <> pure PATCH)
     describe "AccessControlAllowOrigin" do
       "*" `is` AccessControlAllowOrigin (Left Wildcard)
       " * " `is` AccessControlAllowOrigin (Left Wildcard)
       "* " `is` AccessControlAllowOrigin (Left Wildcard)
       "foo" `is` AccessControlAllowOrigin (Right "foo")
       "  foo    " `is` AccessControlAllowOrigin (Right "foo")
-      "https://example.com" `is` AccessControlAllowOrigin (Right "https://example.com")
+      "https://example.com" `is` AccessControlAllowOrigin
+        (Right "https://example.com")
     describe "AccessControlExposeHeaders" do
       "*" `is` AccessControlExposeHeaders (Left Wildcard)
       " * " `is` AccessControlExposeHeaders (Left Wildcard)
       "* " `is` AccessControlExposeHeaders (Left Wildcard)
-      "Vary" `is` AccessControlExposeHeaders (Right $ pure $ String.Lower.fromString "Vary")
-      "Vary" `is` AccessControlExposeHeaders (Right $ pure $ String.Lower.fromString "Vary")
-      "Vary  " `is` AccessControlExposeHeaders (Right $ pure $ String.Lower.fromString "Vary")
-      "Accept, Vary, Content-Type" `is` AccessControlExposeHeaders (Right $ (pure "Accept" <> pure "Vary" <> pure "Content-Type") <#> String.Lower.fromString)
+      "Vary" `is` AccessControlExposeHeaders
+        (Right $ pure $ String.Lower.fromString "Vary")
+      "Vary" `is` AccessControlExposeHeaders
+        (Right $ pure $ String.Lower.fromString "Vary")
+      "Vary  " `is` AccessControlExposeHeaders
+        (Right $ pure $ String.Lower.fromString "Vary")
+      "Accept, Vary, Content-Type" `is` AccessControlExposeHeaders
+        ( Right $ (pure "Accept" <> pure "Vary" <> pure "Content-Type") <#>
+            String.Lower.fromString
+        )
     describe "AccessControlMaxAge" do
       "  123 " `is` AccessControlMaxAge 123
       "  0" `is` AccessControlMaxAge 0
       "23190" `is` AccessControlMaxAge 23190
     describe "AccessControlRequestHeaders" do
-      "Vary" `is` AccessControlRequestHeaders (pure $ String.Lower.fromString "Vary")
-      " Vary" `is` AccessControlRequestHeaders (pure $ String.Lower.fromString "Vary")
-      " Vary  " `is` AccessControlRequestHeaders (pure $ String.Lower.fromString "Vary")
-      "Accept, Vary, Content-Type" `is` AccessControlRequestHeaders ((pure "Accept" <> pure "Vary" <> pure "Content-Type") <#> String.Lower.fromString)
+      "Vary" `is` AccessControlRequestHeaders
+        (pure $ String.Lower.fromString "Vary")
+      " Vary" `is` AccessControlRequestHeaders
+        (pure $ String.Lower.fromString "Vary")
+      " Vary  " `is` AccessControlRequestHeaders
+        (pure $ String.Lower.fromString "Vary")
+      "Accept, Vary, Content-Type" `is` AccessControlRequestHeaders
+        ( (pure "Accept" <> pure "Vary" <> pure "Content-Type") <#>
+            String.Lower.fromString
+        )
     describe "AccessControlRequestMethod" do
       "GET" `is` AccessControlRequestMethod GET
       "   PATCH " `isnt` AccessControlRequestMethod PATCH
@@ -542,21 +612,43 @@ spec =
       "  Bing bar    " `isnt` Authorization (AuthScheme "Bing") "bar"
       "Bar" `is` Authorization (AuthScheme "Bar") ""
     describe "BasicAuth" do
-      "Basic ZGVtbzpwQDU1dzByZA==" `is` BasicAuth {username: "demo", password: "p@55w0rd"}
-      "Bearer ZGVtbzpwQDU1dzByZA==" `isnt` BasicAuth {username: "demo", password: "p@55w0rd"}
-      "Basic foo" `isnt` BasicAuth {username: "demo", password: "p@55w0rd"}
+      "Basic ZGVtbzpwQDU1dzByZA==" `is` BasicAuth
+        { username: "demo", password: "p@55w0rd" }
+      "Bearer ZGVtbzpwQDU1dzByZA==" `isnt` BasicAuth
+        { username: "demo", password: "p@55w0rd" }
+      "Basic foo" `isnt` BasicAuth { username: "demo", password: "p@55w0rd" }
     describe "BearerAuth" do
       "Bearer foo" `is` BearerAuth "foo"
       "Basic foo" `isnt` BearerAuth "foo"
       "Bearer foo    " `is` BearerAuth "foo"
     describe "CacheControl" do
-      "max-age=604800" `is` CacheControl (cacheControlDefaults {maxAge = Just 604800})
-      "   max-age=604800" `isnt` CacheControl (cacheControlDefaults {maxAge = Just 604800})
-      "max-age=604800 " `isnt` CacheControl (cacheControlDefaults {maxAge = Just 604800})
-      "max-age=604800, must-revalidate" `is` CacheControl (cacheControlDefaults {maxAge = Just 604800, mustRevalidate = true})
+      "max-age=604800" `is` CacheControl
+        (cacheControlDefaults { maxAge = Just 604800 })
+      "   max-age=604800" `isnt` CacheControl
+        (cacheControlDefaults { maxAge = Just 604800 })
+      "max-age=604800 " `isnt` CacheControl
+        (cacheControlDefaults { maxAge = Just 604800 })
+      "max-age=604800, must-revalidate" `is` CacheControl
+        (cacheControlDefaults { maxAge = Just 604800, mustRevalidate = true })
       "max-age=20, s-maxage=10, no-cache, must-revalidate, proxy-revalidate, no-store, private, public, must-understand, no-transform, immutable, stale-while-revalidate, stale-if-error"
         `is`
-          CacheControl (cacheControlDefaults {maxAge = Just 20, sMaxAge = Just 10, noCache = true, mustRevalidate = true, proxyRevalidate = true, noStore = true, private = true, public = true, mustUnderstand = true, noTransform = true, immutable = true, staleWhileRevalidate = true, staleIfError = true})
+          CacheControl
+            ( cacheControlDefaults
+                { maxAge = Just 20
+                , sMaxAge = Just 10
+                , noCache = true
+                , mustRevalidate = true
+                , proxyRevalidate = true
+                , noStore = true
+                , private = true
+                , public = true
+                , mustUnderstand = true
+                , noTransform = true
+                , immutable = true
+                , staleWhileRevalidate = true
+                , staleIfError = true
+                }
+            )
       "" `is` CacheControl cacheControlDefaults
       "    " `isnt` CacheControl cacheControlDefaults
       "foo=bar" `is` CacheControl cacheControlDefaults
@@ -569,25 +661,53 @@ spec =
       "close" `is` Connection (Left ConnectionClose)
       "  close  " `is` Connection (Left ConnectionClose)
       "  cLoSe  " `is` Connection (Left ConnectionClose)
-      "fuaiowf" `is` Connection (Right $ pure $ String.Lower.fromString "fuaiowf")
-      "  a   , b ,   c,d" `is` Connection (Right $ String.Lower.fromString <$> (pure "a" <> pure "b" <> pure "c" <> pure "d"))
+      "fuaiowf" `is` Connection
+        (Right $ pure $ String.Lower.fromString "fuaiowf")
+      "  a   , b ,   c,d" `is` Connection
+        ( Right $ String.Lower.fromString <$>
+            (pure "a" <> pure "b" <> pure "c" <> pure "d")
+        )
     describe "ContentDisposition" do
-      "form-data" `is` ContentDisposition (Either.Nested.in3 $ ContentDispositionFormData {filename: Nothing, name: Nothing})
-      "form-data; name=\"foo\"" `is` ContentDisposition (Either.Nested.in3 $ ContentDispositionFormData {filename: Nothing, name: Just "foo"})
-      "form-data; filename=\"foo.txt\"" `is` ContentDisposition (Either.Nested.in3 $ ContentDispositionFormData {filename: Just "foo.txt", name: Nothing})
-      "   form-data; filename=\"foo.txt\"   ;    name=\"foo\"   " `isnt` ContentDisposition (Either.Nested.in3 $ ContentDispositionFormData {filename: Just "foo.txt", name: Just "foo"})
+      "form-data" `is` ContentDisposition
+        ( Either.Nested.in3 $ ContentDispositionFormData
+            { filename: Nothing, name: Nothing }
+        )
+      "form-data; name=\"foo\"" `is` ContentDisposition
+        ( Either.Nested.in3 $ ContentDispositionFormData
+            { filename: Nothing, name: Just "foo" }
+        )
+      "form-data; filename=\"foo.txt\"" `is` ContentDisposition
+        ( Either.Nested.in3 $ ContentDispositionFormData
+            { filename: Just "foo.txt", name: Nothing }
+        )
+      "   form-data; filename=\"foo.txt\"   ;    name=\"foo\"   " `isnt`
+        ContentDisposition
+          ( Either.Nested.in3 $ ContentDispositionFormData
+              { filename: Just "foo.txt", name: Just "foo" }
+          )
 
-      "attachment" `is` ContentDisposition (Either.Nested.in2 $ ContentDispositionAttachment {filename: Nothing})
-      "attachment; filename=\"foo.txt\"" `is` ContentDisposition (Either.Nested.in2 $ ContentDispositionAttachment {filename: Just "foo.txt"})
-      "   attachment; filename=\"foo.txt\"     " `isnt` ContentDisposition (Either.Nested.in2 $ ContentDispositionAttachment {filename: Just "foo.txt"})
+      "attachment" `is` ContentDisposition
+        (Either.Nested.in2 $ ContentDispositionAttachment { filename: Nothing })
+      "attachment; filename=\"foo.txt\"" `is` ContentDisposition
+        ( Either.Nested.in2 $ ContentDispositionAttachment
+            { filename: Just "foo.txt" }
+        )
+      "   attachment; filename=\"foo.txt\"     " `isnt` ContentDisposition
+        ( Either.Nested.in2 $ ContentDispositionAttachment
+            { filename: Just "foo.txt" }
+        )
 
-      "inline" `is` ContentDisposition (Either.Nested.in1 $ ContentDispositionInline)
-      "inline " `is` ContentDisposition (Either.Nested.in1 $ ContentDispositionInline)
-      "   inline    " `is` ContentDisposition (Either.Nested.in1 $ ContentDispositionInline)
+      "inline" `is` ContentDisposition
+        (Either.Nested.in1 $ ContentDispositionInline)
+      "inline " `is` ContentDisposition
+        (Either.Nested.in1 $ ContentDispositionInline)
+      "   inline    " `is` ContentDisposition
+        (Either.Nested.in1 $ ContentDispositionInline)
     describe "ContentEncoding" do
       "gzip" `is` ContentEncoding (pure "gzip")
       "  gzip  " `is` ContentEncoding (pure "gzip")
-      "  gzip  , deflate   " `is` ContentEncoding (pure "gzip" <> pure "deflate")
+      "  gzip  , deflate   " `is` ContentEncoding
+        (pure "gzip" <> pure "deflate")
     describe "ContentLength" do
       "  0    " `is` ContentLength 0
       "  1    " `is` ContentLength 1
@@ -598,18 +718,31 @@ spec =
       "  a " `is` ContentLocation "a"
       "abc" `is` ContentLocation "abc"
     describe "ContentRange" do
-      "bytes 0-10/10" `is` (ContentRange $ Either.Nested.in1 $ ByteRangeStart 0 /\ ByteRangeEnd 10 /\ ByteRangeLength 10)
-      "  bytes   0-10/10  " `is` (ContentRange $ Either.Nested.in1 $ ByteRangeStart 0 /\ ByteRangeEnd 10 /\ ByteRangeLength 10)
-      "  bytes   0-0/0  " `is` (ContentRange $ Either.Nested.in1 $ ByteRangeStart 0 /\ ByteRangeEnd 0 /\ ByteRangeLength 0)
-      "bytes 0-10/*" `is` (ContentRange $ Either.Nested.in2 $ ByteRangeStart 0 /\ ByteRangeEnd 10)
-      "  bytes    0-10/*  " `is` (ContentRange $ Either.Nested.in2 $ ByteRangeStart 0 /\ ByteRangeEnd 10)
+      "bytes 0-10/10" `is`
+        ( ContentRange $ Either.Nested.in1 $ ByteRangeStart 0 /\ ByteRangeEnd 10
+            /\ ByteRangeLength 10
+        )
+      "  bytes   0-10/10  " `is`
+        ( ContentRange $ Either.Nested.in1 $ ByteRangeStart 0 /\ ByteRangeEnd 10
+            /\ ByteRangeLength 10
+        )
+      "  bytes   0-0/0  " `is`
+        ( ContentRange $ Either.Nested.in1 $ ByteRangeStart 0 /\ ByteRangeEnd 0
+            /\ ByteRangeLength 0
+        )
+      "bytes 0-10/*" `is`
+        (ContentRange $ Either.Nested.in2 $ ByteRangeStart 0 /\ ByteRangeEnd 10)
+      "  bytes    0-10/*  " `is`
+        (ContentRange $ Either.Nested.in2 $ ByteRangeStart 0 /\ ByteRangeEnd 10)
       "bytes */10" `is` (ContentRange $ Either.Nested.in3 $ ByteRangeLength 10)
-      "  bytes   */10   " `is` (ContentRange $ Either.Nested.in3 $ ByteRangeLength 10)
+      "  bytes   */10   " `is`
+        (ContentRange $ Either.Nested.in3 $ ByteRangeLength 10)
     describe "Cookie" do
       "foo=" `is` Cookie (pure ("foo" /\ ""))
       "foo=bar" `is` Cookie (pure ("foo" /\ "bar"))
       "foo=bar; baz=" `is` Cookie (pure ("foo" /\ "bar") <> pure ("baz" /\ ""))
-      "foo=bar; baz=quux" `is` Cookie (pure ("foo" /\ "bar") <> pure ("baz" /\ "quux"))
+      "foo=bar; baz=quux" `is` Cookie
+        (pure ("foo" /\ "bar") <> pure ("baz" /\ "quux"))
     describe "Date" $ pure unit
     describe "ETag" $ pure unit
     describe "ExpectContinue" $ pure unit
@@ -637,4 +770,4 @@ spec =
     describe "TransferEncoding" $ pure unit
     describe "Upgrade" $ pure unit
     describe "UserAgent" $ pure unit
-    describe "Vary"$ pure unit
+    describe "Vary" $ pure unit

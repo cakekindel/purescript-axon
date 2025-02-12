@@ -7,7 +7,16 @@ import Data.Maybe (Maybe(..))
 import Data.Show.Generic (genericShow)
 import Data.String as String
 
-data Method = GET | POST | PUT | PATCH | DELETE | OPTIONS | TRACE | CONNECT | HEAD
+data Method
+  = GET
+  | POST
+  | PUT
+  | PATCH
+  | DELETE
+  | OPTIONS
+  | TRACE
+  | CONNECT
+  | HEAD
 
 derive instance Generic Method _
 derive instance Eq Method

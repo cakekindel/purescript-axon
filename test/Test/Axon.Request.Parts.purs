@@ -5,8 +5,18 @@ import Prelude
 import Axon.Header.Typed (ContentType)
 import Axon.Request (Request)
 import Axon.Request as Request
+import Axon.Request.Handler (invokeHandler)
 import Axon.Request.Method (Method(..))
-import Axon.Request.Parts.Class (ExtractError(..), Header, Json(..), Patch, Path(..), Post(..), extractRequestParts, invokeHandler)
+import Axon.Request.Parts.Class
+  ( ExtractError(..)
+  , Header
+  , Json(..)
+  , Patch
+  , Path(..)
+  , Post(..)
+  , Try(..)
+  , extractRequestParts
+  )
 import Axon.Request.Parts.Path (type (/), IgnoreRest)
 import Control.Monad.Error.Class (liftEither)
 import Data.Bifunctor (lmap)
@@ -39,7 +49,8 @@ spec = describe "Parts" do
           { address: "127.0.0.1", port: 81 }
       , method: GET
       }
-    _ :: Request <- invokeHandler req (pure @Aff) <#> lmap (error <<< show) >>= liftEither
+    _ :: Request <- invokeHandler (pure @Aff) req <#> lmap (error <<< show) >>=
+      liftEither
     pure unit
 
   it "extracts header, method, path, JSON body" do
@@ -63,12 +74,12 @@ spec = describe "Parts" do
         Path ("users" / Int) Int ->
         Json { firstName :: String } ->
         Aff String
-      handler _ _ (Path id) (Json {firstName}) = do
+      handler _ _ (Path id) (Json { firstName }) = do
         id `shouldEqual` 12
         firstName `shouldEqual` "henry"
         pure firstName
 
-    name <- invokeHandler req handler
+    name <- invokeHandler handler req
       <#> lmap (error <<< show)
       >>= liftEither
 
@@ -171,10 +182,10 @@ spec = describe "Parts" do
             { address: "127.0.0.1", port: 81 }
         , method: GET
         }
-      a <- extractRequestParts @(Either Request.BodyStringError String) req
+      a <- extractRequestParts @(Try Request.BodyStringError String) req
         <#> lmap (error <<< show)
         >>= liftEither
-      a `shouldEqual` (Right "foo")
+      a `shouldEqual` (Ok "foo")
 
     it "extracts a string body from a readable stream" do
       stream <- Buffer.fromString "foo" UTF8 >>= Stream.readableFromBuffer #
@@ -187,10 +198,10 @@ spec = describe "Parts" do
             { address: "127.0.0.1", port: 81 }
         , method: GET
         }
-      a <- extractRequestParts @(Either Request.BodyStringError String) req
+      a <- extractRequestParts @(Try Request.BodyStringError String) req
         <#> lmap (error <<< show)
         >>= liftEither
-      a `shouldEqual` (Right "foo")
+      a `shouldEqual` (Ok "foo")
 
       a' <- extractRequestParts @String req <#> lmap (error <<< show)
         >>= liftEither
@@ -206,10 +217,10 @@ spec = describe "Parts" do
             { address: "127.0.0.1", port: 81 }
         , method: GET
         }
-      a <- extractRequestParts @(Either Request.BodyStringError String) req
+      a <- extractRequestParts @(Try Request.BodyStringError String) req
         <#> lmap (error <<< show)
         >>= liftEither
-      a `shouldEqual` (Right "foo")
+      a `shouldEqual` (Ok "foo")
 
       a' <- extractRequestParts @String req <#> lmap (error <<< show)
         >>= liftEither

@@ -6,7 +6,79 @@ import Data.Eq.Generic (genericEq)
 import Data.Generic.Rep (class Generic)
 import Data.Show.Generic (genericShow)
 
-data MIME = Other String | Aac | Abw | Arc | Avif | Avi | Azw | Bin | Bmp | Bz | Bz2 | Cda | Csh | Css | Csv | Doc | Docx | Eot | Epub | Gz | Gif | Html | Ico | Ics | Jar | Jpeg | Js | Json | Jsonld | Midi | Mp3 | Mp4 | Mpeg | Mpkg | Odp | Ods | Odt | Oga | Ogv | Ogx | Opus | Otf | Png | Pdf | Php | Ppt | Pptx | Rar | Rtf | Sh | Svg | Tar | Tif | Ts | Ttf | Txt | Vsd | Wav | Weba | Webm | Webp | Woff | Woff2 | Xhtml | Xls | Xlsx | Xml | Xul | Zip | Video3gp | Video3g2 | Archive7z
+data MIME
+  = Other String
+  | Aac
+  | Abw
+  | Arc
+  | Avif
+  | Avi
+  | Azw
+  | Bin
+  | Bmp
+  | Bz
+  | Bz2
+  | Cda
+  | Csh
+  | Css
+  | Csv
+  | Doc
+  | Docx
+  | Eot
+  | Epub
+  | Gz
+  | Gif
+  | Html
+  | Ico
+  | Ics
+  | Jar
+  | Jpeg
+  | Js
+  | Json
+  | Jsonld
+  | Midi
+  | Mp3
+  | Mp4
+  | Mpeg
+  | Mpkg
+  | Odp
+  | Ods
+  | Odt
+  | Oga
+  | Ogv
+  | Ogx
+  | Opus
+  | Otf
+  | Png
+  | Pdf
+  | Php
+  | Ppt
+  | Pptx
+  | Rar
+  | Rtf
+  | Sh
+  | Svg
+  | Tar
+  | Tif
+  | Ts
+  | Ttf
+  | Txt
+  | Vsd
+  | Wav
+  | Weba
+  | Webm
+  | Webp
+  | Woff
+  | Woff2
+  | Xhtml
+  | Xls
+  | Xlsx
+  | Xml
+  | Xul
+  | Zip
+  | Video3gp
+  | Video3g2
+  | Archive7z
 
 derive instance Generic MIME _
 instance Show MIME where
@@ -32,7 +104,8 @@ toString Csh = "application/x-csh"
 toString Css = "text/css"
 toString Csv = "text/csv"
 toString Doc = "application/msword"
-toString Docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+toString Docx =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 toString Eot = "application/vnd.ms-fontobject"
 toString Epub = "application/epub+zip"
 toString Gz = "application/gzip"
@@ -62,7 +135,8 @@ toString Png = "image/png"
 toString Pdf = "application/pdf"
 toString Php = "application/x-httpd-php"
 toString Ppt = "application/vnd.ms-powerpoint"
-toString Pptx = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+toString Pptx =
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 toString Rar = "application/vnd.rar"
 toString Rtf = "application/rtf"
 toString Sh = "application/x-sh"
@@ -81,7 +155,8 @@ toString Woff = "font/woff"
 toString Woff2 = "font/woff2"
 toString Xhtml = "application/xhtml+xml"
 toString Xls = "application/vnd.ms-excel"
-toString Xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+toString Xlsx =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 toString Xml = "application/xml"
 toString Xul = "application/vnd.mozilla.xul+xml"
 toString Zip = "application/zip"
@@ -105,7 +180,9 @@ fromString "application/x-csh" = Csh
 fromString "text/css" = Css
 fromString "text/csv" = Csv
 fromString "application/msword" = Doc
-fromString "application/vnd.openxmlformats-officedocument.wordprocessingml.document" = Docx
+fromString
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document" =
+  Docx
 fromString "application/vnd.ms-fontobject" = Eot
 fromString "application/epub+zip" = Epub
 fromString "application/gzip" = Gz
@@ -135,7 +212,9 @@ fromString "image/png" = Png
 fromString "application/pdf" = Pdf
 fromString "application/x-httpd-php" = Php
 fromString "application/vnd.ms-powerpoint" = Ppt
-fromString "application/vnd.openxmlformats-officedocument.presentationml.presentation" = Pptx
+fromString
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation" =
+  Pptx
 fromString "application/vnd.rar" = Rar
 fromString "application/rtf" = Rtf
 fromString "application/x-sh" = Sh
@@ -154,7 +233,8 @@ fromString "font/woff" = Woff
 fromString "font/woff2" = Woff2
 fromString "application/xhtml+xml" = Xhtml
 fromString "application/vnd.ms-excel" = Xls
-fromString "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" = Xlsx
+fromString "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" =
+  Xlsx
 fromString "application/xml" = Xml
 fromString "application/vnd.mozilla.xul+xml" = Xul
 fromString "application/zip" = Zip
