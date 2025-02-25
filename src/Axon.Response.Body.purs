@@ -2,10 +2,10 @@ module Axon.Response.Body where
 
 import Prelude
 
-import Data.Argonaut.Core (Json, stringify)
-import Effect (Effect)
 import Node.Buffer (Buffer)
 import Node.Stream as Stream
+import Prim.Row (class Cons)
+import Unsafe.Coerce (unsafeCoerce)
 
 data Body
   = BodyEmpty
@@ -19,17 +19,19 @@ instance Show Body where
   show (BodyBuffer _) = "BodyBuffer _"
   show (BodyReadable _) = "BodyReadable _"
 
-stringBody :: String -> Body
-stringBody = BodyString
+string :: String -> Body
+string = BodyString
 
-bufferBody :: Buffer -> Body
-bufferBody = BodyBuffer
+buffer :: Buffer -> Body
+buffer = BodyBuffer
 
-streamBody :: Stream.Readable () -> Body
-streamBody = BodyReadable
+stream :: forall a a'. Cons "read" Stream.Read a' a => Stream.Stream a -> Body
+stream =
+  let
+    narrow :: Stream.Stream a -> Stream.Readable ()
+    narrow = unsafeCoerce
+  in
+    BodyReadable <<< narrow
 
-emptyBody :: Body
-emptyBody = BodyEmpty
-
-jsonBody :: Json -> Body
-jsonBody = stringify >>> BodyString
+empty :: Body
+empty = BodyEmpty

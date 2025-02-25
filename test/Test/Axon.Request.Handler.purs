@@ -12,6 +12,9 @@ import Axon.Request.Parts.Path (type (/))
 import Axon.Response (Response)
 import Axon.Response as Response
 import Axon.Response.Body as Response.Body
+import Axon.Response.Construct (toResponse)
+import Axon.Response.Construct as Response.Construct
+import Axon.Response.Status as Status
 import Control.Monad.Error.Class (liftEither)
 import Data.Bifunctor (lmap)
 import Data.Either (Either(..))
@@ -48,11 +51,9 @@ defaultRequest =
 getPerson :: Get -> Path ("people" / Int) Int -> Aff Response
 getPerson _ (Path id) =
   if id == 1 then
-    pure $ Response.response 200
-      (Response.Body.stringBody "{\"name\": \"Henry\"}")
-      Map.empty
+    liftEffect $ toResponse $ Response.Construct.Json { name: "Henry" }
   else
-    pure $ Response.fromStatus 404
+    liftEffect $ toResponse $ Status.notFound
 
 spec :: Spec Unit
 spec = describe "Handler" do
@@ -62,7 +63,7 @@ spec = describe "Handler" do
     rep <- Handle.invokeHandler (getPerson `Handle.or` notFound) req
       <#> lmap (error <<< show)
       >>= liftEither
-    Response.status rep `shouldEqual` 200
+    Response.status rep `shouldEqual` Status.ok
   it "responds not found" do
     req <- liftEffect $ Request.make $ defaultRequest
       { url = defaultRequest.url `URL.(/)` "people" `URL.(/)` "1"
@@ -71,4 +72,4 @@ spec = describe "Handler" do
     rep <- Handle.invokeHandler (getPerson `Handle.or` notFound) req
       <#> lmap (error <<< show)
       >>= liftEither
-    Response.status rep `shouldEqual` 404
+    Response.status rep `shouldEqual` Status.notFound
