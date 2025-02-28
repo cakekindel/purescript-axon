@@ -47,4 +47,4 @@ fromString =
     go "CONNECT" = Just CONNECT
     go _ = Nothing
   in
-    go
+    go <<< String.toUpper

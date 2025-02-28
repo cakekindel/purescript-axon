@@ -8,6 +8,7 @@
             {
               "aff": ">=8.0.0 <9.0.0"
             },
+            "aff-promise",
             {
               "argonaut-codecs": ">=9.1.0 <10.0.0"
             },
@@ -94,6 +95,7 @@
           ],
           "build_plan": [
             "aff",
+            "aff-promise",
             "argonaut-codecs",
             "argonaut-core",
             "arraybuffer-types",
@@ -790,6 +792,15 @@
         "tailrec",
         "transformers",
         "unsafe-coerce"
+      ]
+    },
+    "aff-promise": {
+      "type": "registry",
+      "version": "4.0.0",
+      "integrity": "sha256-Kq5EupbUpXeUXx4JqGQE7/RTTz/H6idzWhsocwlEFhM=",
+      "dependencies": [
+        "aff",
+        "foreign"
       ]
     },
     "ansi": {

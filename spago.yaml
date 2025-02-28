@@ -1,6 +1,7 @@
 package:
   name: axon
   dependencies:
+    - aff-promise
     - b64
     - parsing
     - aff: '>=8.0.0 <9.0.0'
