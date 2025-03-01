@@ -5,6 +5,38 @@
 HTTP server library inspired by [`axum`](https://docs.rs/latest/axum), allowing best-in-class
 expressive routing.
 
+The main difference between this server library compared to others (eg. the wonderful [`httpurple`](https://github.com/sigma-andex/purescript-httpurple))
+is the philosophy around **routing**. The core abstraction is a [`Handler`](./src/Axon.Request.Handler.purs); any function with the type `[...Request parts] -> m Response`.
+
+This allows each REST action to correspond to a single function, which declares its requirements in its type signature.
+
+For example, an endpoint `GET /persons/:id/address` would be modeled as:
+
+```purs
+getPersonAddress :: Get -> Path ("persons" / Int / "address") Int -> Aff Response
+getPersonAddress _ (Path id) = ...
+```
+
+`POST /persons` accepting a json body:
+
+```purs
+type Person = {firstName: String, lastName: String, age: Maybe Int}
+
+postPerson :: Post -> Path "persons" Unit -> Json Person -> Aff Response
+postPerson _ _ person = ...
+```
+
+Then these can be rolled up into a `/persons` resource with `Handler.or`:
+```purs
+persons :: Handler Aff Response
+persons = getPerson `Handler.or` postPerson `Handler.or` deletePerson `Handler.or` getPersonAddress ...
+```
+
+Then run with:
+```purs
+Axon.serveNode {port: 10000, hostname: "0.0.0.0"} persons
+```
+
 ## Example
 
 This example implements this REST interface in 36LoC:
