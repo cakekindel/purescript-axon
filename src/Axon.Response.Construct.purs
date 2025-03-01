@@ -63,7 +63,7 @@ else instance EncodeJson a => ToResponse (Json a) where
       body = Response.BodyString $ stringifyWithIndent 2 $ encodeJson a
       contentType = (Header.ContentType Type.MIME.Json)
     in
-      toResponse body <> toResponse contentType
+      toResponse contentType <> toResponse body
 
 else instance (ToResponse a) => ToResponse (Status /\ a) where
   toResponse (status /\ a) = toResponse a <#> Response.withStatus status
