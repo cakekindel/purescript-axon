@@ -29,7 +29,8 @@ main = runSpecAndExitProcess [ specReporter ] $ describe "Axon" do
   Test.Header.spec
 
   pending' "example" do
-    cheeses :: Ref.Ref (Array String) <- liftEffect $ Ref.new ["cheddar", "swiss", "gouda"]
+    cheeses :: Ref.Ref (Array String) <- liftEffect $ Ref.new
+      [ "cheddar", "swiss", "gouda" ]
 
     let
       getCheeses :: Get -> Path ("cheeses") _ -> Aff Response
@@ -50,19 +51,20 @@ main = runSpecAndExitProcess [ specReporter ] $ describe "Axon" do
       postCheese _ _ cheese =
         let
           tryInsert as
-            | elem cheese as = {state: as, value: false}
-            | otherwise = {state: as <> [cheese], value: true}
+            | elem cheese as = { state: as, value: false }
+            | otherwise = { state: as <> [ cheese ], value: true }
         in
-        liftEffect
-        $ Ref.modify' tryInsert cheeses
-          >>= if _ then
-                  toResponse $ Status.accepted
-                else
-                  toResponse $ Status.conflict
+          liftEffect
+            $ Ref.modify' tryInsert cheeses
+            >>=
+              if _ then
+                toResponse $ Status.accepted
+              else
+                toResponse $ Status.conflict
 
     handle <-
       Axon.serveBun
-        {port: 8080, hostname: "localhost"}
+        { port: 8080, hostname: "localhost" }
         (getCheeses `Handler.or` postCheese `Handler.or` deleteCheese)
 
     Aff.joinFiber $ handle.join
