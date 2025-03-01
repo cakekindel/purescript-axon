@@ -23,7 +23,7 @@ getPersonAddress _ (Path id) = ...
 `POST /persons` accepting a json body:
 
 ```purs
-type Person = {firstName: String, lastName: String, age: Maybe Int}
+type Person = { firstName :: String, lastName :: String, age :: Maybe Int }
 
 postPerson :: Post -> Path "persons" Unit -> ContentType Json -> Json Person -> Aff Response
 postPerson _ _ person = ...
