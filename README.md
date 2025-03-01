@@ -41,7 +41,7 @@ main = launchAff_ do
     [ "cheddar", "swiss", "gouda" ]
 
   let
-    getCheeses :: Get -> Path ("cheeses") _ -> Aff Response
+    getCheeses :: Get -> Path "cheeses" _ -> Aff Response
     getCheeses _ _ = liftEffect do
       cheeses' <- Ref.read cheeses
       toResponse $ Status.ok /\ Json cheeses'
