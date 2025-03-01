@@ -6,9 +6,12 @@ HTTP server library inspired by [`axum`](https://docs.rs/latest/axum), allowing 
 expressive routing.
 
 The main difference between this server library compared to others (eg. the wonderful [`httpurple`](https://github.com/sigma-andex/purescript-httpurple))
-is the philosophy around **routing**. The core abstraction is a [`Handler`](./src/Axon.Request.Handler.purs); any function with the type `[...Request parts] -> m Response`.
+is the philosophy around **routing**.
+
+The core abstraction is a [`Handler`](./src/Axon.Request.Handler.purs); any function with the type `[...Request parts] -> m Response`.
 
 This allows each REST action to correspond to a single function, which declares its requirements in its type signature.
+This allows for a highly refactorable & composable application, as opposed to a hierarchical routing approach like `routing-duplex`.
 
 For example, an endpoint `GET /persons/:id/address` would be modeled as:
 
@@ -22,7 +25,7 @@ getPersonAddress _ (Path id) = ...
 ```purs
 type Person = {firstName: String, lastName: String, age: Maybe Int}
 
-postPerson :: Post -> Path "persons" Unit -> Json Person -> Aff Response
+postPerson :: Post -> Path "persons" Unit -> ContentType Json -> Json Person -> Aff Response
 postPerson _ _ person = ...
 ```
 
