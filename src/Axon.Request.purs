@@ -39,6 +39,7 @@ import Data.MIME as MIME
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe)
+import Data.Net.SocketAddress (SocketAddress)
 import Data.Show.Generic (genericShow)
 import Data.String.Lower (StringLower)
 import Data.String.Lower as String.Lower
@@ -54,7 +55,6 @@ import Effect.Ref as Ref
 import Node.Buffer (Buffer)
 import Node.Buffer as Buffer
 import Node.Encoding (Encoding(..))
-import Node.Net.Types (IPv4, IPv6, SocketAddress)
 import Node.Stream as Stream
 import Node.Stream.Aff as Stream.Aff
 
@@ -110,7 +110,7 @@ data Body
 data Request =
   Request
     { headers :: Map StringLower String
-    , address :: Either (SocketAddress IPv4) (SocketAddress IPv6)
+    , address :: SocketAddress
     , url :: URL
     , method :: Method
     , bodyRef :: Effect.Ref Body
@@ -118,7 +118,7 @@ data Request =
 
 make ::
   { headers :: Map String String
-  , address :: Either (SocketAddress IPv4) (SocketAddress IPv6)
+  , address :: SocketAddress
   , url :: URL
   , method :: Method
   , body :: Body
@@ -155,7 +155,7 @@ contentLength = lookupHeader "content-length" >=> Int.fromString
 method :: Request -> Method
 method (Request a) = a.method
 
-address :: Request -> Either (SocketAddress IPv4) (SocketAddress IPv6)
+address :: Request -> SocketAddress
 address (Request a) = a.address
 
 url :: Request -> URL

@@ -23,6 +23,7 @@ import Data.Bifunctor (lmap)
 import Data.Either (Either(..))
 import Data.Map as Map
 import Data.Maybe (fromJust)
+import Data.Net.SocketAddress as SocketAddress
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.URL as URL
 import Effect.Aff (Aff)
@@ -45,8 +46,7 @@ spec = describe "Parts" do
       { body: Request.BodyEmpty
       , url: URL.fromString "http://localhost:80/foo" # unsafePartial fromJust
       , headers: Map.singleton "content-type" "application/json"
-      , address: Left $ unsafePerformEffect $ SocketAddress.newIpv4
-          { address: "127.0.0.1", port: 81 }
+      , address: SocketAddress.IPv4 "127.0.0.1" 81
       , method: GET
       }
     _ :: Request <- invokeHandler (pure @Aff) req <#> lmap (error <<< show) >>=
@@ -62,8 +62,7 @@ spec = describe "Parts" do
       , url: URL.fromString "http://localhost:80/users/12" # unsafePartial
           fromJust
       , headers: Map.singleton "content-type" "application/json"
-      , address: Left $ unsafePerformEffect $ SocketAddress.newIpv4
-          { address: "127.0.0.1", port: 81 }
+      , address: SocketAddress.IPv4 "127.0.0.1" 81
       , method: PATCH
       }
 
@@ -91,8 +90,7 @@ spec = describe "Parts" do
         { body: Request.BodyCachedString "foo"
         , url: URL.fromString "http://localhost:80/foo" # unsafePartial fromJust
         , headers: Map.empty
-        , address: Left $ unsafePerformEffect $ SocketAddress.newIpv4
-            { address: "127.0.0.1", port: 81 }
+        , address: SocketAddress.IPv4 "127.0.0.1" 81
         , method: GET
         }
       a <- extractRequestParts @(Path "foo" _) req <#> lmap (error <<< show)
@@ -105,8 +103,7 @@ spec = describe "Parts" do
         , url: URL.fromString "http://localhost:80/foo/bar/baz" # unsafePartial
             fromJust
         , headers: Map.empty
-        , address: Left $ unsafePerformEffect $ SocketAddress.newIpv4
-            { address: "127.0.0.1", port: 81 }
+        , address: SocketAddress.IPv4 "127.0.0.1" 81
         , method: GET
         }
       a <- extractRequestParts @(Path ("foo" / "bar" / "baz") _) req
@@ -120,8 +117,7 @@ spec = describe "Parts" do
         , url: URL.fromString "http://localhost:80/foo/bar/baz" # unsafePartial
             fromJust
         , headers: Map.empty
-        , address: Left $ unsafePerformEffect $ SocketAddress.newIpv4
-            { address: "127.0.0.1", port: 81 }
+        , address: SocketAddress.IPv4 "127.0.0.1" 81
         , method: GET
         }
       a <- extractRequestParts @(Path ("foo" / "bar") _) req
@@ -133,8 +129,7 @@ spec = describe "Parts" do
         , url: URL.fromString "http://localhost:80/foo/bar/baz" # unsafePartial
             fromJust
         , headers: Map.empty
-        , address: Left $ unsafePerformEffect $ SocketAddress.newIpv4
-            { address: "127.0.0.1", port: 81 }
+        , address: SocketAddress.IPv4 "127.0.0.1" 81
         , method: GET
         }
       a <- extractRequestParts @(Path ("foo" / "bar" / IgnoreRest) _) req
@@ -148,8 +143,7 @@ spec = describe "Parts" do
         , url: URL.fromString "http://localhost:80/foo/123/bar" # unsafePartial
             fromJust
         , headers: Map.empty
-        , address: Left $ unsafePerformEffect $ SocketAddress.newIpv4
-            { address: "127.0.0.1", port: 81 }
+        , address: SocketAddress.IPv4 "127.0.0.1" 81
         , method: GET
         }
       a <- extractRequestParts @(Path ("foo" / Int / "bar") _) req
@@ -163,8 +157,7 @@ spec = describe "Parts" do
         , url: URL.fromString "http://localhost:80/foo/123/bar/baz" #
             unsafePartial fromJust
         , headers: Map.empty
-        , address: Left $ unsafePerformEffect $ SocketAddress.newIpv4
-            { address: "127.0.0.1", port: 81 }
+        , address: SocketAddress.IPv4 "127.0.0.1" 81
         , method: GET
         }
       a <- extractRequestParts @(Path ("foo" / Int / "bar" / String) _) req
@@ -178,8 +171,7 @@ spec = describe "Parts" do
         { body: Request.BodyCachedString "foo"
         , url: URL.fromString "http://localhost:80/foo" # unsafePartial fromJust
         , headers: Map.empty
-        , address: Left $ unsafePerformEffect $ SocketAddress.newIpv4
-            { address: "127.0.0.1", port: 81 }
+        , address: SocketAddress.IPv4 "127.0.0.1" 81
         , method: GET
         }
       a <- extractRequestParts @(Try Request.BodyStringError String) req
@@ -194,8 +186,7 @@ spec = describe "Parts" do
         { body: Request.BodyReadable stream
         , url: URL.fromString "http://localhost:80/foo" # unsafePartial fromJust
         , headers: Map.empty
-        , address: Left $ unsafePerformEffect $ SocketAddress.newIpv4
-            { address: "127.0.0.1", port: 81 }
+        , address: SocketAddress.IPv4 "127.0.0.1" 81
         , method: GET
         }
       a <- extractRequestParts @(Try Request.BodyStringError String) req
@@ -213,8 +204,7 @@ spec = describe "Parts" do
         { body: Request.BodyCached buf
         , url: URL.fromString "http://localhost:80/foo" # unsafePartial fromJust
         , headers: Map.empty
-        , address: Left $ unsafePerformEffect $ SocketAddress.newIpv4
-            { address: "127.0.0.1", port: 81 }
+        , address: SocketAddress.IPv4 "127.0.0.1" 81
         , method: GET
         }
       a <- extractRequestParts @(Try Request.BodyStringError String) req
@@ -234,8 +224,7 @@ spec = describe "Parts" do
         { body: Request.BodyReadable stream
         , url: URL.fromString "http://localhost:80/foo" # unsafePartial fromJust
         , headers: Map.empty
-        , address: Left $ unsafePerformEffect $ SocketAddress.newIpv4
-            { address: "127.0.0.1", port: 81 }
+        , address: SocketAddress.IPv4 "127.0.0.1" 81
         , method: POST
         }
       a <- extractRequestParts @(Post /\ Json { foo :: Int, bar :: String }) req

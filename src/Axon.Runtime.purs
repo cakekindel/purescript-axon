@@ -4,24 +4,27 @@ import Prelude
 
 import Axon.Request (Request)
 import Axon.Response (Response)
+import Control.Monad.Fork.Class (class MonadFork)
 import Data.Maybe (Maybe)
 import Data.Time.Duration (Seconds)
-import Effect (Effect)
 import Effect.Aff (Aff, Fiber)
+import Effect.Aff.Class (class MonadAff)
+import Effect.Aff.Unlift (class MonadUnliftAff)
 
-type Init =
-  { fetch :: Request -> Aff Response
+type Init m =
+  { fetch :: Request -> m Response
   , port :: Maybe Int
   , hostname :: Maybe String
   , idleTimeout :: Maybe Seconds
   }
 
-type Handle a =
+type Handle m f a =
   { server :: a
-  , join :: Fiber Unit
-  , stop :: Aff Unit
+  , join :: f Unit
+  , stop :: m Unit
   }
 
 class Runtime :: Type -> Constraint
 class Runtime a where
-  serve :: Init -> Aff (Handle a)
+  serve ::
+    forall m f. MonadFork f m => MonadUnliftAff m => Init m -> m (Handle m f a)

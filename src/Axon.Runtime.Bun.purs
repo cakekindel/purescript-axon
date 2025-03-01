@@ -1,6 +1,6 @@
 module Axon.Runtime.Bun where
 
-import Prelude
+import Prelude hiding (join)
 
 import Axon.Request (Request)
 import Axon.Response (Response)
@@ -10,18 +10,22 @@ import Axon.Web.Request as WebRequest
 import Axon.Web.Response (WebResponse)
 import Axon.Web.Response as WebResponse
 import Control.Monad.Error.Class (try)
+import Control.Monad.Fork.Class (fork, join, never)
 import Control.Promise (Promise)
 import Control.Promise as Promise
 import Data.Either (Either(..))
+import Data.Net.SocketAddress (SocketAddress)
+import Data.Net.SocketAddress as SocketAddress
 import Data.Newtype (unwrap)
 import Data.Nullable (Nullable)
 import Data.Nullable as Null
 import Effect (Effect)
 import Effect.Aff (Aff)
 import Effect.Aff as Aff
+import Effect.Aff.Class (liftAff)
+import Effect.Aff.Unlift (class MonadUnliftAff, UnliftAff(..), askUnliftAff)
 import Effect.Class (liftEffect)
 import Effect.Exception (error)
-import Node.Net.Types (IPv4, IPv6, SocketAddress)
 
 foreign import data Bun :: Type
 
@@ -37,31 +41,49 @@ foreign import stop :: Bun -> Promise Unit
 foreign import ref :: Bun -> Effect Unit
 foreign import unref :: Bun -> Effect Unit
 foreign import requestAddr ::
-  { left :: forall a b. a -> Either a b, right :: forall a b. b -> Either a b } ->
+  { ipv4 :: String -> Int -> SocketAddress
+  , ipv6 :: String -> Int -> SocketAddress
+  } ->
   WebRequest ->
   Bun ->
-  Effect (Either (SocketAddress IPv4) (SocketAddress IPv6))
+  Effect SocketAddress
 
 fetchImpl ::
-  (Request -> Aff Response) -> WebRequest -> Bun -> Effect (Promise WebResponse)
-fetchImpl f req bun =
-  Promise.fromAff do
-    addr <- liftEffect $ requestAddr { left: Left, right: Right } req bun
-    req' <- liftEffect $ WebRequest.toRequest addr req
-    f req' >>= (liftEffect <<< WebResponse.fromResponse)
+  forall m.
+  MonadUnliftAff m =>
+  (Request -> m Response) ->
+  m
+    ( WebRequest ->
+      Bun ->
+      Effect (Promise WebResponse)
+    )
+fetchImpl f = do
+  UnliftAff toAff <- askUnliftAff
+  pure \req bun ->
+    Promise.fromAff do
+      addr <- liftEffect $ requestAddr
+        { ipv4: SocketAddress.IPv4, ipv6: SocketAddress.IPv6 }
+        req
+        bun
+      req' <- liftEffect $ WebRequest.toRequest addr req
+      toAff $ f req' >>= (liftEffect <<< WebResponse.fromResponse)
 
 instance Runtime Bun where
   serve o = do
-    -- Killing `stopSignal` causes `stopFiber` to complete
-    stopSignal <- Aff.forkAff Aff.never
-    stopFiber <- Aff.forkAff $ void $ try $ Aff.joinFiber stopSignal
+    -- `stopSignal` will never resolve, but it can be killed.
+    stopSignal <- liftAff $ Aff.forkAff Aff.never
+
+    -- blocks on `stopSignal`, resolving when it's killed.
+    stopFiber <- fork $ liftAff $ void $ try $ Aff.joinFiber stopSignal
+
+    fetch <- fetchImpl o.fetch
 
     let
       o' =
         { port: Null.toNullable o.port
         , hostname: Null.toNullable o.hostname
         , idleTimeout: Null.toNullable $ unwrap <$> o.idleTimeout
-        , fetch: fetchImpl o.fetch
+        , fetch
         }
 
     bun <- liftEffect $ serve o'
@@ -70,7 +92,7 @@ instance Runtime Bun where
     pure
       { server: bun
       , join: stopFiber
-      , stop: do
+      , stop: liftAff do
           Promise.toAff $ stop bun
           Aff.killFiber (error "") stopSignal
       }

@@ -86,6 +86,7 @@
             {
               "typelevel-prelude": ">=7.0.0 <8.0.0"
             },
+            "unlift",
             {
               "url-immutable": ">=1.0.0 <2.0.0"
             },
@@ -102,6 +103,7 @@
             "arrays",
             "b64",
             "bifunctors",
+            "catenable-lists",
             "console",
             "const",
             "contravariant",
@@ -118,6 +120,8 @@
             "foldable-traversable",
             "foreign",
             "foreign-object",
+            "free",
+            "freet",
             "functions",
             "functors",
             "gen",
@@ -129,6 +133,7 @@
             "lazy",
             "lists",
             "maybe",
+            "monad-control",
             "newtype",
             "node-buffer",
             "node-event-emitter",
@@ -162,6 +167,7 @@
             "typelevel-prelude",
             "unfoldable",
             "unicode",
+            "unlift",
             "unsafe-coerce",
             "url-immutable",
             "variant",
@@ -1177,6 +1183,23 @@
         "unsafe-coerce"
       ]
     },
+    "freet": {
+      "type": "registry",
+      "version": "7.0.0",
+      "integrity": "sha256-zkL6wU4ZPq8xz1kGFxoliWqyhBksepMJTyA68VEBaJo=",
+      "dependencies": [
+        "aff",
+        "bifunctors",
+        "effect",
+        "either",
+        "exists",
+        "free",
+        "prelude",
+        "tailrec",
+        "transformers",
+        "tuples"
+      ]
+    },
     "functions": {
       "type": "registry",
       "version": "6.0.0",
@@ -1327,6 +1350,17 @@
         "free",
         "functors",
         "transformers"
+      ]
+    },
+    "monad-control": {
+      "type": "registry",
+      "version": "5.0.0",
+      "integrity": "sha256-bgfDW30wbIm70NR1Tvvh9P+VFQMDh1wK2sSJXCj/dZc=",
+      "dependencies": [
+        "aff",
+        "freet",
+        "identity",
+        "lists"
       ]
     },
     "newtype": {
@@ -1918,6 +1952,25 @@
         "foldable-traversable",
         "maybe",
         "strings"
+      ]
+    },
+    "unlift": {
+      "type": "registry",
+      "version": "1.0.1",
+      "integrity": "sha256-nbBCVV0fZz/3UHKoW11dcTwBYmQOIgK31ht2BN47RPw=",
+      "dependencies": [
+        "aff",
+        "effect",
+        "either",
+        "freet",
+        "identity",
+        "lists",
+        "maybe",
+        "monad-control",
+        "prelude",
+        "st",
+        "transformers",
+        "tuples"
       ]
     },
     "unsafe-coerce": {

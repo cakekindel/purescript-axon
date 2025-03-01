@@ -23,9 +23,7 @@ foreign import requestAddr ::
 /** @typedef {{port: number | null, hostname: string | null, idleTimeout: number | null, fetch: (req: Request) => (bun: Bun.Server) => () => Promise<Response>}} ServeOptions */
 
 /**
- * @template A
- * @template B
- * @typedef {unknown} Either
+ * @typedef {(addr: string) => (port: number) => unknown} FFISocketAddress
  */
 
 /** @type {(s: ServeOptions) => () => Bun.Server} */
@@ -47,13 +45,13 @@ export const unref = s => () => s.unref()
 /** @type {(s: Bun.Server) => () => Promise<void>} */
 export const stop = s => () => s.stop()
 
-/** @type {(_: {left: <A, B>(a: A) => Either<A, B>, right: <A, B>(b: B) => Either<A, B>}) => (req: Request) => (s: Bun.Server) => () => Either<Net.SocketAddress, Net.SocketAddress>} */
+/** @type {(_: {ipv4: FFISocketAddress, ipv6: FFISocketAddress}) => (req: Request) => (s: Bun.Server) => () => unknown} */
 export const requestAddr =
-  ({ left, right }) =>
+  ({ ipv4, ipv6 }) =>
   req =>
   s =>
   () => {
     const ip = s.requestIP(req)
     if (!ip) throw new Error('Request closed')
-    return ip.family === 'IPv4' ? left(ip) : right(ip)
+    return (ip.family === 'IPv4' ? ipv4 : ipv6)(ip.address)(ip.port)
   }

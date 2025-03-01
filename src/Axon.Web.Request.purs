@@ -13,12 +13,12 @@ import Control.Monad.Trans.Class (lift)
 import Data.ArrayBuffer.Types (Uint8Array)
 import Data.Either (Either)
 import Data.Maybe (fromMaybe)
+import Data.Net.SocketAddress (SocketAddress)
 import Data.Nullable (Nullable)
 import Data.Nullable as Null
 import Data.URL as URL
 import Effect (Effect)
 import Effect.Exception (error)
-import Node.Net.Types (IPv4, IPv6, IpFamily(..), SocketAddress)
 import Node.Stream as Stream
 import Web.Streams.ReadableStream (ReadableStream)
 
@@ -37,7 +37,7 @@ foreign import readableFromWeb ::
   ReadableStream Uint8Array -> Effect (Stream.Readable ())
 
 toRequest ::
-  Either (SocketAddress IPv4) (SocketAddress IPv6) ->
+  SocketAddress ->
   WebRequest ->
   Effect Request
 toRequest address req =

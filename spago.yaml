@@ -4,6 +4,7 @@ package:
     - aff-promise
     - b64
     - parsing
+    - unlift
     - aff: '>=8.0.0 <9.0.0'
     - argonaut-codecs: '>=9.1.0 <10.0.0'
     - argonaut-core: '>=7.0.0 <8.0.0'
