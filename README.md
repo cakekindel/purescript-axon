@@ -10,7 +10,7 @@ expressive routing.
 This example implements this REST interface in 36LoC:
 
 - `GET /cheeses` - Lists all cheeses (strings) known to server
-- `POST /cheeses` - Add a cheese to the in memory cheese list
+- `POST /cheeses` - Add a cheese to the cheese list
 - `DELETE /cheeses/:cheese` - Remove a cheese from the cheese list
 
 ```purs
