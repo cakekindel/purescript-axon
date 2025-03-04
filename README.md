@@ -30,12 +30,14 @@ postPerson _ _ _ person = ...
 ```
 
 Then these can be rolled up into a `/persons` resource with `Handler.or`:
+
 ```purs
 persons :: Handler Aff Response
 persons = getPerson `Handler.or` postPerson `Handler.or` deletePerson `Handler.or` getPersonAddress ...
 ```
 
 Then run with:
+
 ```purs
 Axon.serveNode {port: 10000, hostname: "0.0.0.0"} persons
 ```

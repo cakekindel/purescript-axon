@@ -23,14 +23,16 @@ module Axon.Request
 import Prelude
 
 import Axon.Request.Method (Method)
+import Axon.Response.Body (empty)
 import Control.Monad.Error.Class (throwError, try)
 import Control.Monad.Except (ExceptT(..), runExceptT)
 import Control.Monad.Trans.Class (lift)
 import Data.Argonaut.Core (Json)
 import Data.Argonaut.Core (stringify) as JSON
 import Data.Argonaut.Parser (jsonParser) as JSON
+import Data.Array as Array
 import Data.Bifunctor (lmap)
-import Data.Either (Either)
+import Data.Either (Either(..))
 import Data.FoldableWithIndex (foldlWithIndex)
 import Data.Generic.Rep (class Generic)
 import Data.Int as Int
@@ -38,14 +40,14 @@ import Data.MIME (MIME)
 import Data.MIME as MIME
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe)
+import Data.Maybe (Maybe, fromMaybe, maybe)
 import Data.Net.SocketAddress (SocketAddress)
 import Data.Show.Generic (genericShow)
 import Data.String.Lower (StringLower)
 import Data.String.Lower as String.Lower
 import Data.URL (URL)
 import Effect (Effect)
-import Effect.Aff (Aff)
+import Effect.Aff (Aff, makeAff)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Exception (Error)
@@ -55,6 +57,7 @@ import Effect.Ref as Ref
 import Node.Buffer (Buffer)
 import Node.Buffer as Buffer
 import Node.Encoding (Encoding(..))
+import Node.EventEmitter as Event
 import Node.Stream as Stream
 import Node.Stream.Aff as Stream.Aff
 
@@ -109,7 +112,7 @@ data Body
 
 data Request =
   Request
-    { headers :: Map StringLower String
+    { headers :: Map StringLower (Array String)
     , address :: SocketAddress
     , url :: URL
     , method :: Method
@@ -117,7 +120,7 @@ data Request =
     }
 
 make ::
-  { headers :: Map String String
+  { headers :: Map String (Array String)
   , address :: SocketAddress
   , url :: URL
   , method :: Method
@@ -137,20 +140,22 @@ make a = do
     , method: a.method
     }
 
-headers :: Request -> Map StringLower String
+headers :: Request -> Map StringLower (Array String)
 headers (Request a) = a.headers
 
-lookupHeader :: String -> Request -> Maybe String
-lookupHeader k (Request a) = Map.lookup (String.Lower.fromString k) a.headers
+lookupHeader :: String -> Request -> Array String
+lookupHeader k (Request a) = fromMaybe [] $ Map.lookup
+  (String.Lower.fromString k)
+  a.headers
 
-contentType :: Request -> Maybe MIME
+contentType :: Request -> Array MIME
 contentType = lookupHeader "content-type" >>> map MIME.fromString
 
-accept :: Request -> Maybe MIME
+accept :: Request -> Array MIME
 accept = lookupHeader "accept" >>> map MIME.fromString
 
 contentLength :: Request -> Maybe Int
-contentLength = lookupHeader "content-length" >=> Int.fromString
+contentLength = lookupHeader "content-length" >>> Array.head >=> Int.fromString
 
 method :: Request -> Method
 method (Request a) = a.method
@@ -184,13 +189,13 @@ bodyBuffer r@(Request { bodyRef }) =
         # liftEffect
         <#> lmap BodyBufferErrorReadable
         # ExceptT
-    readAll s =
-      Stream.Aff.readAll s
-        # liftAff
-        # try
-        <#> lmap BodyBufferErrorReading
-        # ExceptT
-        >>= (liftEffect <<< Buffer.concat)
+    readAll s = do
+      bufs <- liftEffect $ Ref.new []
+      liftEffect $ Event.on_ Stream.dataH
+        (\chunk -> Ref.modify_ (_ <> [ chunk ]) bufs)
+        s
+      makeAff \res -> Event.once Stream.endH (res $ Right unit) s $> mempty
+      liftEffect $ Ref.read bufs >>= Buffer.concat
   in
     runExceptT do
       body <- Ref.read bodyRef # liftEffect
@@ -200,7 +205,7 @@ bodyBuffer r@(Request { bodyRef }) =
         BodyCachedJSON json -> Buffer.fromString (JSON.stringify json) UTF8 #
           liftEffect
         _ -> do
-          buf <- stream >>= readAll
+          buf <- stream >>= (lift <<< readAll)
           Ref.write (BodyCached buf) bodyRef $> buf # liftEffect
 
 bodyString :: Request -> Aff (Either BodyStringError String)

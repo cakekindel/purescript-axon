@@ -62,6 +62,7 @@ import Data.Map as Map
 import Data.Maybe (Maybe)
 import Data.Show.Generic (genericShow)
 import Data.String.Lower as String.Lower
+import Data.Traversable (for)
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.URL as URL
 import Effect.Aff (Aff)
@@ -139,12 +140,13 @@ instance TypedHeader a => RequestParts (Header a) where
     value <-
       Request.headers r
         # Map.lookup (String.Lower.fromString $ headerName @a)
+        >>= Array.head
         # liftMaybe ExtractNext
     runParser value (headerValueParser @a)
       # bimap
-          ( ExtractBadRequest <<< Array.intercalate "\n" <<< parseErrorHuman
-              value
-              5
+          ( ExtractBadRequest
+              <<< Array.intercalate "\n"
+              <<< parseErrorHuman value 5
           )
           Header
       # liftEither

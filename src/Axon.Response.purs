@@ -25,7 +25,7 @@ import Data.String.Lower (StringLower)
 import Data.String.Lower as String.Lower
 
 data Response = Response
-  { body :: Body, headers :: Map StringLower String, status :: Status }
+  { body :: Body, headers :: Map StringLower (Array String), status :: Status }
 
 derive instance Generic Response _
 instance Semigroup Response where
@@ -38,7 +38,7 @@ instance Semigroup Response where
 instance Show Response where
   show = genericShow
 
-response :: Status -> Body -> Map String String -> Response
+response :: Status -> Body -> Map String (Array String) -> Response
 response s b h = Response
   { status: s
   , body: b
@@ -53,12 +53,13 @@ status (Response a) = a.status
 body :: Response -> Body
 body (Response a) = a.body
 
-headers :: Response -> Map StringLower String
+headers :: Response -> Map StringLower (Array String)
 headers (Response a) = a.headers
 
 withHeader :: String -> String -> Response -> Response
 withHeader k v (Response a) = Response $ a
-  { headers = Map.insert (String.Lower.fromString k) v a.headers }
+  { headers = Map.insertWith append (String.Lower.fromString k) [ v ] a.headers
+  }
 
 withStatus :: Status -> Response -> Response
 withStatus s (Response a) = Response $ a { status = s }

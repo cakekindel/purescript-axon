@@ -13,9 +13,9 @@ import Effect.Aff.Unlift (class MonadUnliftAff)
 
 type Init m =
   { fetch :: Request -> m Response
-  , port :: Maybe Int
-  , hostname :: Maybe String
-  , idleTimeout :: Maybe Seconds
+  , port :: Int
+  , hostname :: String
+  , idleTimeout :: Seconds
   }
 
 type Handle m f a =

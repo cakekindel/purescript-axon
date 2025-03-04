@@ -30,7 +30,7 @@ import Test.Spec (Spec, describe, it)
 import Test.Spec.Assertions (shouldEqual)
 
 defaultRequest ::
-  { headers :: Map String String
+  { headers :: Map String (Array String)
   , address :: SocketAddress
   , url :: URL
   , method :: Method
@@ -39,7 +39,7 @@ defaultRequest ::
 defaultRequest =
   { body: Request.BodyEmpty
   , url: URL.fromString "http://localhost:80/" # unsafePartial fromJust
-  , headers: Map.singleton "content-type" "application/json"
+  , headers: Map.singleton "content-type" (pure "application/json")
   , address: SocketAddress.IPv4 "127.0.0.1" 81
   , method: GET
   }

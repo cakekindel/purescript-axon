@@ -1,4 +1,4 @@
-module Axon where
+module Axon.Serve where
 
 import Prelude
 
@@ -11,14 +11,12 @@ import Axon.Response as Rep
 import Axon.Response.Status as Status
 import Axon.Runtime (class Runtime)
 import Axon.Runtime as Runtime
-import Axon.Runtime.Bun as Runtime.Bun
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.Fork.Class (class MonadFork)
 import Data.Either (Either(..))
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.Time.Duration (Milliseconds(..), convertDuration)
-import Effect.Aff (Aff, Fiber)
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Aff.Unlift (class MonadUnliftAff)
 import Effect.Class (liftEffect)
@@ -37,23 +35,41 @@ type Serve m =
   , handleUnmatched :: Handler m Response
   )
 
+defaultHandleError :: forall m. MonadAff m => Request -> Error -> m Response
+defaultHandleError _ e =
+  let
+    rep = Rep.response Status.internalServerError (Rep.BodyString $ show e)
+      Map.empty
+  in
+    liftEffect $ Console.error (show e) $> rep
+
+defaultHandleBadRequest ::
+  forall m. MonadAff m => Request -> String -> m Response
+defaultHandleBadRequest _ e =
+  let
+    rep = Rep.response Status.badRequest (Rep.BodyString $ show e) Map.empty
+  in
+    pure rep
+
+defaultHandleBadRequestDebug ::
+  forall m. MonadAff m => Request -> String -> m Response
+defaultHandleBadRequestDebug _ e =
+  let
+    rep = Rep.response Status.badRequest (Rep.BodyString $ show e) Map.empty
+  in
+    liftEffect $ Console.error (show e) $> rep
+
+defaultHandleUnmatched :: forall m. MonadAff m => Handler m Response
+defaultHandleUnmatched = Handler.Default.notFound
+
 serveDefaults :: forall m. MonadAff m => Record (Serve m)
 serveDefaults =
   { port: 8000
   , hostname: "127.0.0.1"
   , idleTimeout: Milliseconds 30000.0
-  , handleError: \_ e ->
-      let
-        rep = Rep.response Status.internalServerError (Rep.BodyString $ show e)
-          Map.empty
-      in
-        liftEffect $ Console.error (show e) $> rep
-  , handleBadRequest: \_ e ->
-      let
-        rep = Rep.response Status.badRequest (Rep.BodyString $ show e) Map.empty
-      in
-        pure rep
-  , handleUnmatched: Handler.Default.notFound
+  , handleError: defaultHandleError
+  , handleBadRequest: defaultHandleBadRequest
+  , handleUnmatched: defaultHandleUnmatched
   }
 
 serveToRuntime ::
@@ -77,33 +93,10 @@ serveToRuntime h o =
           Right rep -> pure rep
   in
     { fetch: fetch false h
-    , port: Just o.port
-    , hostname: Just o.hostname
-    , idleTimeout: Just $ convertDuration o.idleTimeout
+    , port: o.port
+    , hostname: o.hostname
+    , idleTimeout: convertDuration o.idleTimeout
     }
-
--- | `serve` using `Bun` in `Aff`
-serveBun ::
-  forall opts optsMissing optsMerged.
-  Union opts optsMissing (Serve Aff) =>
-  Union opts (Serve Aff) optsMerged =>
-  Nub optsMerged (Serve Aff) =>
-  Record opts ->
-  Handler Aff Response ->
-  Aff (Runtime.Handle Aff Fiber Runtime.Bun.Bun)
-serveBun = serve
-
--- | `serve` in `Aff`
-serveAff ::
-  forall @rt opts optsMissing optsMerged.
-  Runtime rt =>
-  Union opts optsMissing (Serve Aff) =>
-  Union opts (Serve Aff) optsMerged =>
-  Nub optsMerged (Serve Aff) =>
-  Record opts ->
-  Handler Aff Response ->
-  Aff (Runtime.Handle Aff Fiber rt)
-serveAff = serve
 
 -- | Runs the server using the given `runtime`.
 -- |

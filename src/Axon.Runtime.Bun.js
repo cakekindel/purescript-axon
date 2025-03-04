@@ -3,9 +3,9 @@ import * as Net from 'node:net'
 
 /*
 type Serve =
-  { port :: Nullable Int
-  , hostname :: Nullable String
-  , idleTimeout :: Nullable Number
+  { port :: Int
+  , hostname :: String
+  , idleTimeout :: Number
   , fetch :: WebRequest -> Bun -> Effect (Promise WebResponse)
   }
 

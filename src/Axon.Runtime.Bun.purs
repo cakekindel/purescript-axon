@@ -30,9 +30,9 @@ import Effect.Exception (error)
 foreign import data Bun :: Type
 
 type Serve =
-  { port :: Nullable Int
-  , hostname :: Nullable String
-  , idleTimeout :: Nullable Number
+  { port :: Int
+  , hostname :: String
+  , idleTimeout :: Number
   , fetch :: WebRequest -> Bun -> Effect (Promise WebResponse)
   }
 
@@ -80,9 +80,9 @@ instance Runtime Bun where
 
     let
       o' =
-        { port: Null.toNullable o.port
-        , hostname: Null.toNullable o.hostname
-        , idleTimeout: Null.toNullable $ unwrap <$> o.idleTimeout
+        { port: o.port
+        , hostname: o.hostname
+        , idleTimeout: unwrap o.idleTimeout
         , fetch
         }
 

@@ -661,4 +661,5 @@ typedHeaderToResponse =
   pure
     <<< Response.response Status.ok Response.BodyEmpty
     <<< Map.singleton (headerName @a)
+    <<< pure
     <<< headerValueEncode

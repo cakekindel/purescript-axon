@@ -15,7 +15,7 @@ derive newtype instance (Eq a) => Eq (Header a)
 derive newtype instance (Ord a) => Ord (Header a)
 derive newtype instance (Show a) => Show (Header a)
 
-newtype HeaderMap = HeaderMap (Map StringLower String)
+newtype HeaderMap = HeaderMap (Map StringLower (Array String))
 
 derive instance Generic HeaderMap _
 derive instance Newtype HeaderMap _

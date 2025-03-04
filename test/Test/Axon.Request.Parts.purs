@@ -45,7 +45,7 @@ spec = describe "Parts" do
     req <- liftEffect $ Request.make
       { body: Request.BodyEmpty
       , url: URL.fromString "http://localhost:80/foo" # unsafePartial fromJust
-      , headers: Map.singleton "content-type" "application/json"
+      , headers: Map.singleton "content-type" (pure "application/json")
       , address: SocketAddress.IPv4 "127.0.0.1" 81
       , method: GET
       }
@@ -61,7 +61,7 @@ spec = describe "Parts" do
       { body: Request.BodyReadable stream
       , url: URL.fromString "http://localhost:80/users/12" # unsafePartial
           fromJust
-      , headers: Map.singleton "content-type" "application/json"
+      , headers: Map.singleton "content-type" (pure "application/json")
       , address: SocketAddress.IPv4 "127.0.0.1" 81
       , method: PATCH
       }
