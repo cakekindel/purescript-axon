@@ -5,7 +5,7 @@ import Prelude
 import Axon.Request (Body(..), Request)
 import Axon.Request as Request
 import Axon.Request.Method as Method
-import Axon.Response (Response(..))
+import Axon.Response (Response)
 import Axon.Response as Rep
 import Axon.Runtime (class Runtime)
 import Control.Monad.Error.Class (liftMaybe)

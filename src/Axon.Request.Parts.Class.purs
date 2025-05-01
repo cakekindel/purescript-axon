@@ -62,7 +62,6 @@ import Data.Map as Map
 import Data.Maybe (Maybe)
 import Data.Show.Generic (genericShow)
 import Data.String.Lower as String.Lower
-import Data.Traversable (for)
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.URL as URL
 import Effect.Aff (Aff)

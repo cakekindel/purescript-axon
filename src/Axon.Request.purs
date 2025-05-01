@@ -23,7 +23,6 @@ module Axon.Request
 import Prelude
 
 import Axon.Request.Method (Method)
-import Axon.Response.Body (empty)
 import Control.Monad.Error.Class (throwError, try)
 import Control.Monad.Except (ExceptT(..), runExceptT)
 import Control.Monad.Trans.Class (lift)
@@ -40,7 +39,7 @@ import Data.MIME (MIME)
 import Data.MIME as MIME
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe, fromMaybe, maybe)
+import Data.Maybe (Maybe, fromMaybe)
 import Data.Net.SocketAddress (SocketAddress)
 import Data.Show.Generic (genericShow)
 import Data.String.Lower (StringLower)
@@ -48,7 +47,6 @@ import Data.String.Lower as String.Lower
 import Data.URL (URL)
 import Effect (Effect)
 import Effect.Aff (Aff, makeAff)
-import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Exception (Error)
 import Effect.Exception as Error
@@ -59,7 +57,6 @@ import Node.Buffer as Buffer
 import Node.Encoding (Encoding(..))
 import Node.EventEmitter as Event
 import Node.Stream as Stream
-import Node.Stream.Aff as Stream.Aff
 
 data BodyReadableError
   = BodyReadableErrorHasBeenConsumed

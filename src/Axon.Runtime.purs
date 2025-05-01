@@ -5,10 +5,7 @@ import Prelude
 import Axon.Request (Request)
 import Axon.Response (Response)
 import Control.Monad.Fork.Class (class MonadFork)
-import Data.Maybe (Maybe)
 import Data.Time.Duration (Seconds)
-import Effect.Aff (Aff, Fiber)
-import Effect.Aff.Class (class MonadAff)
 import Effect.Aff.Unlift (class MonadUnliftAff)
 
 type Init m =

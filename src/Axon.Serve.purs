@@ -15,7 +15,6 @@ import Control.Monad.Error.Class (throwError)
 import Control.Monad.Fork.Class (class MonadFork)
 import Data.Either (Either(..))
 import Data.Map as Map
-import Data.Maybe (Maybe(..))
 import Data.Time.Duration (Milliseconds(..), convertDuration)
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Aff.Unlift (class MonadUnliftAff)

@@ -10,17 +10,13 @@ import Axon.Web.Request as WebRequest
 import Axon.Web.Response (WebResponse)
 import Axon.Web.Response as WebResponse
 import Control.Monad.Error.Class (try)
-import Control.Monad.Fork.Class (fork, join, never)
+import Control.Monad.Fork.Class (fork)
 import Control.Promise (Promise)
 import Control.Promise as Promise
-import Data.Either (Either(..))
 import Data.Net.SocketAddress (SocketAddress)
 import Data.Net.SocketAddress as SocketAddress
 import Data.Newtype (unwrap)
-import Data.Nullable (Nullable)
-import Data.Nullable as Null
 import Effect (Effect)
-import Effect.Aff (Aff)
 import Effect.Aff as Aff
 import Effect.Aff.Class (liftAff)
 import Effect.Aff.Unlift (class MonadUnliftAff, UnliftAff(..), askUnliftAff)

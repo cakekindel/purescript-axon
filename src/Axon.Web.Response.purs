@@ -2,11 +2,10 @@ module Axon.Web.Response where
 
 import Prelude
 
-import Axon.Response (Response(..))
+import Axon.Response (Response)
 import Axon.Response as Response
 import Data.ArrayBuffer.Types (ArrayBuffer)
 import Data.FoldableWithIndex (foldlWithIndex)
-import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (unwrap)
 import Data.String.Lower as String.Lower
 import Effect (Effect)

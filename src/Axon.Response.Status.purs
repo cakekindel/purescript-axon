@@ -90,6 +90,9 @@ resetContent = Status 205
 partialContent :: Status
 partialContent = Status 206
 
+-- | 207 Multi-Status
+-- | Conveys information about multiple resources, for situations where multiple status codes might be appropriate.
+multiStatus :: Status
 multiStatus = Status 207
 
 -- | 208 Already Reported
