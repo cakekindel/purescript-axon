@@ -11,8 +11,8 @@ import Axon.Web.Response (WebResponse)
 import Axon.Web.Response as WebResponse
 import Control.Monad.Error.Class (try)
 import Control.Monad.Fork.Class (fork)
-import Control.Promise (Promise)
-import Control.Promise as Promise
+import Promise.Aff (Promise)
+import Promise.Aff as Promise
 import Data.Net.SocketAddress (SocketAddress)
 import Data.Net.SocketAddress as SocketAddress
 import Data.Newtype (unwrap)

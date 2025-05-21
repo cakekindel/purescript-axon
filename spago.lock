@@ -9,9 +9,6 @@
               "aff": ">=8.0.0 <9.0.0"
             },
             {
-              "aff-promise": ">=4.0.0 <5.0.0"
-            },
-            {
               "argonaut-codecs": ">=9.1.0 <10.0.0"
             },
             {
@@ -48,7 +45,13 @@
               "foldable-traversable": ">=6.0.0 <7.0.0"
             },
             {
+              "fork": ">=6.0.0 <7.0.0"
+            },
+            {
               "integers": ">=6.0.0 <7.0.0"
+            },
+            {
+              "js-promise-aff": ">=1.0.0 <2.0.0"
             },
             {
               "js-uri": ">=3.1.0 <4.0.0"
@@ -107,7 +110,6 @@
           ],
           "build_plan": [
             "aff",
-            "aff-promise",
             "argonaut-codecs",
             "argonaut-core",
             "arraybuffer-types",
@@ -131,6 +133,7 @@
             "foldable-traversable",
             "foreign",
             "foreign-object",
+            "fork",
             "free",
             "freet",
             "functions",
@@ -141,6 +144,7 @@
             "invariant",
             "js-date",
             "js-promise",
+            "js-promise-aff",
             "js-uri",
             "lazy",
             "lists",
@@ -812,15 +816,6 @@
         "unsafe-coerce"
       ]
     },
-    "aff-promise": {
-      "type": "registry",
-      "version": "4.0.0",
-      "integrity": "sha256-Kq5EupbUpXeUXx4JqGQE7/RTTz/H6idzWhsocwlEFhM=",
-      "dependencies": [
-        "aff",
-        "foreign"
-      ]
-    },
     "ansi": {
       "type": "registry",
       "version": "7.0.0",
@@ -1311,6 +1306,16 @@
         "functions",
         "maybe",
         "prelude"
+      ]
+    },
+    "js-promise-aff": {
+      "type": "registry",
+      "version": "1.0.0",
+      "integrity": "sha256-s9kml9Ei74hKlMMg41yyZp4GkbmYUwaH+gBWWrdhwec=",
+      "dependencies": [
+        "aff",
+        "foreign",
+        "js-promise"
       ]
     },
     "js-uri": {
