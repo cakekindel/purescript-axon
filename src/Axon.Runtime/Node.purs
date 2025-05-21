@@ -9,7 +9,6 @@ import Axon.Response (Response)
 import Axon.Response as Rep
 import Axon.Runtime (class Runtime)
 import Control.Monad.Error.Class (liftMaybe)
-import Control.Monad.Fork.Class (fork)
 import Data.Bifunctor (lmap)
 import Data.Either (Either(..))
 import Data.Map as Map
@@ -24,6 +23,7 @@ import Data.URL (URL)
 import Data.URL as URL
 import Effect (Effect)
 import Effect.Aff (launchAff_, makeAff)
+import Effect.Aff as Aff
 import Effect.Aff.Class (liftAff)
 import Effect.Aff.Unlift (class MonadUnliftAff, UnliftAff(..), askUnliftAff)
 import Effect.Class (liftEffect)
@@ -149,8 +149,11 @@ instance Runtime Server where
             o.port
             server
             $> mempty
-    join' <- fork $ liftAff $ makeAff \res ->
-      Event.on closeH (res $ Right unit) server $> mempty
+    join' <-
+      liftAff
+      $ Aff.forkAff
+      $ Aff.makeAff
+      $ \res -> Event.on closeH (res $ Right unit) server $> mempty
 
     pure
       { server

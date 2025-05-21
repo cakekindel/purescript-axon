@@ -6,7 +6,7 @@ import Axon.Runtime as Runtime
 import Axon.Runtime.Bun as Runtime.Bun
 import Axon.Serve (Serve)
 import Axon.Serve as Serve
-import Effect.Aff (Aff, Fiber)
+import Effect.Aff (Aff)
 import Prim.Row (class Nub, class Union)
 
 serve ::
@@ -16,5 +16,5 @@ serve ::
   Nub optsMerged (Serve Aff) =>
   Record opts ->
   Handler Aff Response ->
-  Aff (Runtime.Handle Aff Fiber Runtime.Bun.Bun)
+  Aff (Runtime.Handle Aff Runtime.Bun.Bun)
 serve = Serve.serve

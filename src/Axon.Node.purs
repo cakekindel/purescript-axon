@@ -5,7 +5,7 @@ import Axon.Response (Response)
 import Axon.Runtime as Runtime
 import Axon.Runtime.Node as Runtime.Node
 import Axon.Serve (Serve, serve)
-import Effect.Aff (Aff, Fiber)
+import Effect.Aff (Aff)
 import Prim.Row (class Nub, class Union)
 
 serveHTTP1 ::
@@ -15,5 +15,5 @@ serveHTTP1 ::
   Nub optsMerged (Serve Aff) =>
   Record opts ->
   Handler Aff Response ->
-  Aff (Runtime.Handle Aff Fiber Runtime.Node.Server)
+  Aff (Runtime.Handle Aff Runtime.Node.Server)
 serveHTTP1 = serve

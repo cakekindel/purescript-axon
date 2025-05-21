@@ -12,7 +12,6 @@ import Axon.Response.Status as Status
 import Axon.Runtime (class Runtime)
 import Axon.Runtime as Runtime
 import Control.Monad.Error.Class (throwError)
-import Control.Monad.Fork.Class (class MonadFork)
 import Data.Either (Either(..))
 import Data.Map as Map
 import Data.Time.Duration (Milliseconds(..), convertDuration)
@@ -104,16 +103,15 @@ serveToRuntime h o =
 -- |
 -- | Second argument is your application's `Handler` entrypoint.
 serve ::
-  forall @runtime f m opts optsMissing optsMerged.
+  forall @runtime m opts optsMissing optsMerged.
   MonadUnliftAff m =>
-  MonadFork f m =>
   Runtime runtime =>
   Union opts optsMissing (Serve m) =>
   Union opts (Serve m) optsMerged =>
   Nub optsMerged (Serve m) =>
   Record opts ->
   Handler m Response ->
-  m (Runtime.Handle m f runtime)
+  m (Runtime.Handle m runtime)
 serve opts' handle =
   let
     -- Add visible type application to Record.merge

@@ -10,9 +10,6 @@ import Axon.Web.Request as WebRequest
 import Axon.Web.Response (WebResponse)
 import Axon.Web.Response as WebResponse
 import Control.Monad.Error.Class (try)
-import Control.Monad.Fork.Class (fork)
-import Promise.Aff (Promise)
-import Promise.Aff as Promise
 import Data.Net.SocketAddress (SocketAddress)
 import Data.Net.SocketAddress as SocketAddress
 import Data.Newtype (unwrap)
@@ -22,6 +19,8 @@ import Effect.Aff.Class (liftAff)
 import Effect.Aff.Unlift (class MonadUnliftAff, UnliftAff(..), askUnliftAff)
 import Effect.Class (liftEffect)
 import Effect.Exception (error)
+import Promise.Aff (Promise)
+import Promise.Aff as Promise
 
 foreign import data Bun :: Type
 
@@ -70,7 +69,7 @@ instance Runtime Bun where
     stopSignal <- liftAff $ Aff.forkAff Aff.never
 
     -- blocks on `stopSignal`, resolving when it's killed.
-    stopFiber <- fork $ liftAff $ void $ try $ Aff.joinFiber stopSignal
+    stopFiber <- liftAff $ Aff.forkAff $ void $ try $ Aff.joinFiber stopSignal
 
     fetch <- fetchImpl o.fetch
 

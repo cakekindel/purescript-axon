@@ -4,8 +4,8 @@ import Prelude
 
 import Axon.Request (Request)
 import Axon.Response (Response)
-import Control.Monad.Fork.Class (class MonadFork)
 import Data.Time.Duration (Seconds)
+import Effect.Aff (Fiber)
 import Effect.Aff.Unlift (class MonadUnliftAff)
 
 type Init m =
@@ -15,13 +15,12 @@ type Init m =
   , idleTimeout :: Seconds
   }
 
-type Handle m f a =
+type Handle m a =
   { server :: a
-  , join :: f Unit
+  , join :: Fiber Unit
   , stop :: m Unit
   }
 
 class Runtime :: Type -> Constraint
 class Runtime a where
-  serve ::
-    forall m f. MonadFork f m => MonadUnliftAff m => Init m -> m (Handle m f a)
+  serve :: forall m. MonadUnliftAff m => Init m -> m (Handle m a)
