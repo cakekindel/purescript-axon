@@ -46,6 +46,7 @@
             {
               "integers": ">=6.0.0 <7.0.0"
             },
+            "js-uri",
             {
               "maybe": ">=6.0.0 <7.0.0"
             },
@@ -130,6 +131,7 @@
             "invariant",
             "js-date",
             "js-promise",
+            "js-uri",
             "lazy",
             "lists",
             "maybe",
@@ -1299,6 +1301,15 @@
         "functions",
         "maybe",
         "prelude"
+      ]
+    },
+    "js-uri": {
+      "type": "registry",
+      "version": "3.1.0",
+      "integrity": "sha256-3p0ynHveCJmC2CXze+eMBdW/2l5e953Q8XMAKz+jxUo=",
+      "dependencies": [
+        "functions",
+        "maybe"
       ]
     },
     "lazy": {

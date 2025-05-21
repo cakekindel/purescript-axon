@@ -2,6 +2,21 @@ module Axon.Header.Typed where
 
 import Prelude
 
+import Axon.Header.Typed.Cookie as Cookie
+import Axon.Header.Typed.Parsing
+  ( closeRegex
+  , commas
+  , commas1
+  , datetime
+  , directive
+  , headerName
+  , method
+  , mime
+  , quotesRe
+  , semis
+  , token
+  , token68
+  ) as Parse
 import Axon.Request.Method (Method)
 import Axon.Request.Method as Method
 import Control.Alt ((<|>))
@@ -9,15 +24,13 @@ import Data.Array as Array
 import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Array.NonEmpty as Array.NonEmpty
 import Data.Bifunctor (lmap)
-import Data.Date as Date
 import Data.Date.Component (Month(..), Weekday(..))
-import Data.DateTime (DateTime(..))
+import Data.DateTime (DateTime)
 import Data.DateTime as DateTime
 import Data.Either (Either(..))
 import Data.Either.Nested (type (\/))
 import Data.Either.Nested as Either.Nested
-import Data.Enum (fromEnum, toEnum)
-import Data.Foldable (fold)
+import Data.Enum (fromEnum)
 import Data.Generic.Rep (class Generic)
 import Data.Int as Int
 import Data.MIME as MIME
@@ -30,171 +43,19 @@ import Data.String.Base64 as String.Base64
 import Data.String.CodeUnits as String.CodeUnit
 import Data.String.Lower (StringLower)
 import Data.String.Lower as String.Lower
-import Data.String.Regex (Regex)
 import Data.String.Regex as Regex
-import Data.String.Regex.Flags as Regex.Flags
-import Data.Time as Time
 import Data.Tuple (fst)
 import Data.Tuple.Nested (type (/\), (/\))
 import Effect.Exception as Error
 import Parsing (Parser)
 import Parsing (liftMaybe, fail, liftEither) as Parse
-import Parsing.Combinators (between, choice, optionMaybe, optional, sepBy1, try) as Parse
-import Parsing.Combinators.Array (many, many1) as Parse
-import Parsing.String (anyTill, eof, regex, rest, string) as Parse
+import Parsing.Combinators (between, optionMaybe, optional, try) as Parse
+import Parsing.Combinators.Array (many) as Parse
+import Parsing.String (anyTill, eof, rest, string) as Parse
 import Parsing.String.Basic (whiteSpace, space, intDecimal, alphaNum) as Parse
-import Partial.Unsafe (unsafeCrashWith, unsafePartial)
 import Prim.Row (class Nub, class Union)
 import Record as Record
 import Type.MIME as Type.MIME
-
--- TODO: this is fine, probably switch to a tokenizer at some point. parsing headers is also probably a solved problem
-
-rules ::
-  { char :: Parser String String
-  , upAlpha :: Parser String String
-  , loAlpha :: Parser String String
-  , alpha :: Parser String String
-  , digit :: Parser String String
-  , ctl :: Parser String String
-  , cr :: Parser String String
-  , lf :: Parser String String
-  , sp :: Parser String String
-  , ht :: Parser String String
-  , dquote :: Parser String String
-  , crlf :: Parser String String
-  , lws :: Parser String String
-  , text :: Parser String String
-  , separators :: Parser String String
-  , token :: Parser String String
-  , quoted :: Parser String String
-  , cookieChar :: Parser String String
-  , token68 :: Parser String String
-  }
-rules =
-  let
-    un (Left e) = unsafeCrashWith e
-    un (Right a) = a
-    char = un $ Parse.regex "[\\x00-\\x7f]" Regex.Flags.noFlags
-    upAlpha = un $ Parse.regex "[A-Z]" Regex.Flags.noFlags
-    loAlpha = un $ Parse.regex "[a-z]" Regex.Flags.noFlags
-    alpha = loAlpha <|> upAlpha
-    digit = un $ Parse.regex "[0-9]" Regex.Flags.noFlags
-    ctl = un $ Parse.regex "[\\x00-\\x1f]|\\x7f" Regex.Flags.noFlags
-    cr = un $ Parse.regex "\\x0d" Regex.Flags.noFlags
-    lf = un $ Parse.regex "\\x0a" Regex.Flags.noFlags
-    sp = un $ Parse.regex "\\x20" Regex.Flags.noFlags
-    ht = un $ Parse.regex "\\x09" Regex.Flags.noFlags
-    dquote = un $ Parse.regex "\\x22" Regex.Flags.noFlags
-    crlf = un $ Parse.regex "\\x0d\\x0a" Regex.Flags.noFlags
-    lws = Parse.optional crlf *> Parse.many1 (Parse.try sp <|> ht) <#> fold
-    text = un $ Parse.regex "\\x20|\\x09|[^\\x00-\\x1f]" Regex.Flags.noFlags
-    separators = un $ Parse.regex "[()<>@,;:\\\\\"\\/\\[\\]?={}\\x20\\x09]"
-      Regex.Flags.noFlags
-    token = un $ Parse.regex
-      "[^\\x00-\\x1f()<>@,;:\\\\\"\\/\\[\\]?={}\\x20\\x09]+"
-      Regex.Flags.noFlags
-    quoted = un $ Parse.regex "\"(.*)(?<!\\\\)\"" Regex.Flags.noFlags
-    cookieChar = un $ Parse.regex
-      "\\x21|[\\x23-\\x2b]|[\\x2d-\\x3a]|[\\x3c-\\x5b]|[\\x5d-\\x7e]"
-      Regex.Flags.noFlags
-    token68 = un $ Parse.regex "[a-zA-Z0-9\\-._~+\\/]+=*" Regex.Flags.noFlags
-  in
-    { char
-    , upAlpha
-    , loAlpha
-    , alpha
-    , digit
-    , ctl
-    , cr
-    , lf
-    , sp
-    , ht
-    , dquote
-    , crlf
-    , lws
-    , text
-    , separators
-    , token
-    , quoted
-    , cookieChar
-    , token68
-    }
-
-data Wildcard = Wildcard
-
-derive instance Generic Wildcard _
-derive instance Eq Wildcard
-instance Show Wildcard where
-  show = genericShow
-
-quotesRe :: Regex
-quotesRe = unsafePartial $ (\(Right a) -> a) $ Regex.regex "(^\\s*\")|(\"\\s*$)"
-  Regex.Flags.global
-
-datetimeParser :: Parser String DateTime
-datetimeParser =
-  let
-    as :: forall a. String -> a -> Parser String a
-    as s a = Parse.string s $> a
-
-    weekday = Parse.choice
-      [ as "Mon" Monday
-      , as "Tue" Tuesday
-      , as "Wed" Wednesday
-      , as "Thu" Thursday
-      , as "Fri" Friday
-      , as "Sat" Saturday
-      , as "Sun" Sunday
-      ]
-    month = Parse.choice
-      [ as "Jan" January
-      , as "Feb" February
-      , as "Mar" March
-      , as "Apr" April
-      , as "May" May
-      , as "Jun" June
-      , as "Jul" July
-      , as "Aug" August
-      , as "Sep" September
-      , as "Oct" October
-      , as "Nov" November
-      , as "Dec" December
-      ]
-    day = Parse.intDecimal <#> toEnum >>= Parse.liftMaybe (const "invalid day")
-    year = Parse.intDecimal <#> toEnum >>= Parse.liftMaybe
-      (const "invalid year")
-    date =
-      ( pure (\d m y -> Date.exactDate y m d)
-          <*> (weekday *> Parse.whiteSpace *> day)
-          <*> (Parse.whiteSpace *> month)
-          <*> (Parse.whiteSpace *> year)
-      )
-        >>= Parse.liftMaybe (const "invalid date")
-
-    time =
-      ( pure (\h m s ms -> Time.Time h m s ms)
-          <*>
-            ( ( Parse.intDecimal <#> toEnum >>= Parse.liftMaybe
-                  (const "invalid hour")
-              )
-            )
-          <*>
-            ( Parse.string ":" *>
-                ( Parse.intDecimal <#> toEnum >>= Parse.liftMaybe
-                    (const "invalid minutes")
-                )
-            )
-          <*>
-            ( Parse.string ":" *>
-                ( Parse.intDecimal <#> toEnum >>= Parse.liftMaybe
-                    (const "invalid seconds")
-                )
-            )
-          <*> (toEnum 0 # Parse.liftMaybe (const "invalid milliseconds"))
-      )
-  in
-    pure DateTime <*> (date <* Parse.whiteSpace) <*> time
 
 printDateTime :: DateTime -> String
 printDateTime dt =
@@ -240,78 +101,17 @@ printDateTime dt =
     ]
       # Array.intercalate " "
 
-list ::
-  forall a sep. Parser String sep -> Parser String a -> Parser String (Array a)
-list sep p = do
-  head <- Parse.optionMaybe p
-  tail <- Array.many
-    (Parse.whiteSpace *> sep *> Parse.whiteSpace *> Parse.optionMaybe p)
-  pure $ Array.catMaybes $ [ head ] <> tail
+-- TODO: this is fine, probably switch to a tokenizer at some point. parsing headers is also probably a solved problem
+data Wildcard = Wildcard
 
-list1 ::
-  forall a sep.
-  Parser String sep ->
-  Parser String a ->
-  Parser String (NonEmptyArray a)
-list1 sep p = do
-  head <- p
-  tail <-
-    Array.many
-      (Parse.whiteSpace *> sep *> Parse.whiteSpace *> Parse.optionMaybe p)
-      <#> Array.catMaybes
-  pure $ Array.NonEmpty.cons' head tail
-
-commas :: forall a. Parser String a -> Parser String (Array a)
-commas = list $ Parse.string ","
-
-commas1 :: forall a. Parser String a -> Parser String (NonEmptyArray a)
-commas1 = list1 $ Parse.string ","
-
-semis :: forall a. Parser String a -> Parser String (Array a)
-semis = list $ Parse.string ";"
-
-semis1 :: forall a. Parser String a -> Parser String (NonEmptyArray a)
-semis1 = list1 $ Parse.string ";"
+derive instance Generic Wildcard _
+derive instance Eq Wildcard
+instance Show Wildcard where
+  show = genericShow
 
 wildcardParser :: Parser String Wildcard
 wildcardParser = Parse.whiteSpace *> (Parse.string "*" $> Wildcard) <*
   Parse.whiteSpace
-
-mimeParser :: Parser String MIME.MIME
-mimeParser = Parse.anyTill (void Parse.space <|> Parse.eof) <#> fst <#>
-  MIME.fromString
-
-headerNameRegexParser :: Parser String String
-headerNameRegexParser = unsafePartial $ (\(Right a) -> a) $ Parse.regex
-  "[\\w-]+"
-  Regex.Flags.noFlags
-
-closeRegexParser :: Parser String String
-closeRegexParser = unsafePartial $ (\(Right a) -> a) $ Parse.regex
-  "\\s*close\\s*"
-  Regex.Flags.ignoreCase
-
-headerNameParser :: Parser String StringLower
-headerNameParser = Parse.between Parse.whiteSpace Parse.whiteSpace
-  (headerNameRegexParser <#> String.Lower.fromString)
-
-methodParser :: Parser String Method
-methodParser =
-  Parse.try (Parse.string "GET" $> Method.GET)
-    <|> Parse.try (Parse.string "HEAD" $> Method.HEAD)
-    <|> Parse.try (Parse.string "POST" $> Method.POST)
-    <|> Parse.try (Parse.string "PUT" $> Method.PUT)
-    <|> Parse.try (Parse.string "PATCH" $> Method.PATCH)
-    <|> Parse.try (Parse.string "DELETE" $> Method.DELETE)
-    <|> Parse.try (Parse.string "CONNECT" $> Method.CONNECT)
-    <|> Parse.try (Parse.string "OPTIONS" $> Method.OPTIONS)
-    <|> Parse.string "TRACE"
-    $> Method.TRACE
-
-directiveParser :: Parser String (String /\ Maybe String)
-directiveParser =
-  pure (/\) <*> rules.token <*> Parse.optionMaybe
-    (Parse.string "=" *> (rules.quoted <|> rules.token))
 
 class TypedHeader a where
   headerName :: String
@@ -589,7 +389,7 @@ derive instance Eq a => Eq (ContentType a)
 instance Show a => Show (ContentType a) where
   show = genericShow
 
-newtype Cookie = Cookie (NonEmptyArray (String /\ String))
+newtype Cookie = Cookie Cookie.Cookies
 
 derive instance Newtype (Cookie) _
 derive instance Generic (Cookie) _
@@ -896,12 +696,12 @@ instance TypedHeader (Accept String) where
 
 instance TypedHeader (Accept MIME.MIME) where
   headerName = "Accept"
-  headerValueParser = mimeParser <#> Accept
+  headerValueParser = Parse.mime <#> Accept
   headerValueEncode = MIME.toString <<< unwrap
 
 instance TypedHeader (Accept Type.MIME.Aac) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -913,7 +713,7 @@ instance TypedHeader (Accept Type.MIME.Aac) where
 
 instance TypedHeader (Accept Type.MIME.Abw) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -925,7 +725,7 @@ instance TypedHeader (Accept Type.MIME.Abw) where
 
 instance TypedHeader (Accept Type.MIME.Arc) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -937,7 +737,7 @@ instance TypedHeader (Accept Type.MIME.Arc) where
 
 instance TypedHeader (Accept Type.MIME.Avif) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -949,7 +749,7 @@ instance TypedHeader (Accept Type.MIME.Avif) where
 
 instance TypedHeader (Accept Type.MIME.Avi) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -961,7 +761,7 @@ instance TypedHeader (Accept Type.MIME.Avi) where
 
 instance TypedHeader (Accept Type.MIME.Azw) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -973,7 +773,7 @@ instance TypedHeader (Accept Type.MIME.Azw) where
 
 instance TypedHeader (Accept Type.MIME.Bin) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -985,7 +785,7 @@ instance TypedHeader (Accept Type.MIME.Bin) where
 
 instance TypedHeader (Accept Type.MIME.Bmp) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -997,7 +797,7 @@ instance TypedHeader (Accept Type.MIME.Bmp) where
 
 instance TypedHeader (Accept Type.MIME.Bz) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           (const $ "expected " <> MIME.toString (Type.MIME.value @Type.MIME.Bz))
@@ -1008,7 +808,7 @@ instance TypedHeader (Accept Type.MIME.Bz) where
 
 instance TypedHeader (Accept Type.MIME.Bz2) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1020,7 +820,7 @@ instance TypedHeader (Accept Type.MIME.Bz2) where
 
 instance TypedHeader (Accept Type.MIME.Cda) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1032,7 +832,7 @@ instance TypedHeader (Accept Type.MIME.Cda) where
 
 instance TypedHeader (Accept Type.MIME.Csh) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1044,7 +844,7 @@ instance TypedHeader (Accept Type.MIME.Csh) where
 
 instance TypedHeader (Accept Type.MIME.Css) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1056,7 +856,7 @@ instance TypedHeader (Accept Type.MIME.Css) where
 
 instance TypedHeader (Accept Type.MIME.Csv) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1068,7 +868,7 @@ instance TypedHeader (Accept Type.MIME.Csv) where
 
 instance TypedHeader (Accept Type.MIME.Doc) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1080,7 +880,7 @@ instance TypedHeader (Accept Type.MIME.Doc) where
 
 instance TypedHeader (Accept Type.MIME.Docx) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1092,7 +892,7 @@ instance TypedHeader (Accept Type.MIME.Docx) where
 
 instance TypedHeader (Accept Type.MIME.Eot) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1104,7 +904,7 @@ instance TypedHeader (Accept Type.MIME.Eot) where
 
 instance TypedHeader (Accept Type.MIME.Epub) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1116,7 +916,7 @@ instance TypedHeader (Accept Type.MIME.Epub) where
 
 instance TypedHeader (Accept Type.MIME.Gz) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           (const $ "expected " <> MIME.toString (Type.MIME.value @Type.MIME.Gz))
@@ -1127,7 +927,7 @@ instance TypedHeader (Accept Type.MIME.Gz) where
 
 instance TypedHeader (Accept Type.MIME.Gif) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1139,7 +939,7 @@ instance TypedHeader (Accept Type.MIME.Gif) where
 
 instance TypedHeader (Accept Type.MIME.Html) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1151,7 +951,7 @@ instance TypedHeader (Accept Type.MIME.Html) where
 
 instance TypedHeader (Accept Type.MIME.Ico) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1163,7 +963,7 @@ instance TypedHeader (Accept Type.MIME.Ico) where
 
 instance TypedHeader (Accept Type.MIME.Ics) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1175,7 +975,7 @@ instance TypedHeader (Accept Type.MIME.Ics) where
 
 instance TypedHeader (Accept Type.MIME.Jar) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1187,7 +987,7 @@ instance TypedHeader (Accept Type.MIME.Jar) where
 
 instance TypedHeader (Accept Type.MIME.Jpeg) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1199,7 +999,7 @@ instance TypedHeader (Accept Type.MIME.Jpeg) where
 
 instance TypedHeader (Accept Type.MIME.Js) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           (const $ "expected " <> MIME.toString (Type.MIME.value @Type.MIME.Js))
@@ -1210,7 +1010,7 @@ instance TypedHeader (Accept Type.MIME.Js) where
 
 instance TypedHeader (Accept Type.MIME.Json) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1222,7 +1022,7 @@ instance TypedHeader (Accept Type.MIME.Json) where
 
 instance TypedHeader (Accept Type.MIME.Jsonld) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1234,7 +1034,7 @@ instance TypedHeader (Accept Type.MIME.Jsonld) where
 
 instance TypedHeader (Accept Type.MIME.Midi) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1246,7 +1046,7 @@ instance TypedHeader (Accept Type.MIME.Midi) where
 
 instance TypedHeader (Accept Type.MIME.Mp3) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1258,7 +1058,7 @@ instance TypedHeader (Accept Type.MIME.Mp3) where
 
 instance TypedHeader (Accept Type.MIME.Mp4) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1270,7 +1070,7 @@ instance TypedHeader (Accept Type.MIME.Mp4) where
 
 instance TypedHeader (Accept Type.MIME.Mpeg) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1282,7 +1082,7 @@ instance TypedHeader (Accept Type.MIME.Mpeg) where
 
 instance TypedHeader (Accept Type.MIME.Mpkg) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1294,7 +1094,7 @@ instance TypedHeader (Accept Type.MIME.Mpkg) where
 
 instance TypedHeader (Accept Type.MIME.Odp) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1306,7 +1106,7 @@ instance TypedHeader (Accept Type.MIME.Odp) where
 
 instance TypedHeader (Accept Type.MIME.Ods) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1318,7 +1118,7 @@ instance TypedHeader (Accept Type.MIME.Ods) where
 
 instance TypedHeader (Accept Type.MIME.Odt) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1330,7 +1130,7 @@ instance TypedHeader (Accept Type.MIME.Odt) where
 
 instance TypedHeader (Accept Type.MIME.Oga) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1342,7 +1142,7 @@ instance TypedHeader (Accept Type.MIME.Oga) where
 
 instance TypedHeader (Accept Type.MIME.Ogv) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1354,7 +1154,7 @@ instance TypedHeader (Accept Type.MIME.Ogv) where
 
 instance TypedHeader (Accept Type.MIME.Ogx) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1366,7 +1166,7 @@ instance TypedHeader (Accept Type.MIME.Ogx) where
 
 instance TypedHeader (Accept Type.MIME.Opus) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1378,7 +1178,7 @@ instance TypedHeader (Accept Type.MIME.Opus) where
 
 instance TypedHeader (Accept Type.MIME.Otf) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1390,7 +1190,7 @@ instance TypedHeader (Accept Type.MIME.Otf) where
 
 instance TypedHeader (Accept Type.MIME.Png) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1402,7 +1202,7 @@ instance TypedHeader (Accept Type.MIME.Png) where
 
 instance TypedHeader (Accept Type.MIME.Pdf) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1414,7 +1214,7 @@ instance TypedHeader (Accept Type.MIME.Pdf) where
 
 instance TypedHeader (Accept Type.MIME.Php) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1426,7 +1226,7 @@ instance TypedHeader (Accept Type.MIME.Php) where
 
 instance TypedHeader (Accept Type.MIME.Ppt) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1438,7 +1238,7 @@ instance TypedHeader (Accept Type.MIME.Ppt) where
 
 instance TypedHeader (Accept Type.MIME.Pptx) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1450,7 +1250,7 @@ instance TypedHeader (Accept Type.MIME.Pptx) where
 
 instance TypedHeader (Accept Type.MIME.Rar) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1462,7 +1262,7 @@ instance TypedHeader (Accept Type.MIME.Rar) where
 
 instance TypedHeader (Accept Type.MIME.Rtf) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1474,7 +1274,7 @@ instance TypedHeader (Accept Type.MIME.Rtf) where
 
 instance TypedHeader (Accept Type.MIME.Sh) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           (const $ "expected " <> MIME.toString (Type.MIME.value @Type.MIME.Sh))
@@ -1485,7 +1285,7 @@ instance TypedHeader (Accept Type.MIME.Sh) where
 
 instance TypedHeader (Accept Type.MIME.Svg) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1497,7 +1297,7 @@ instance TypedHeader (Accept Type.MIME.Svg) where
 
 instance TypedHeader (Accept Type.MIME.Tar) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1509,7 +1309,7 @@ instance TypedHeader (Accept Type.MIME.Tar) where
 
 instance TypedHeader (Accept Type.MIME.Tif) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1521,7 +1321,7 @@ instance TypedHeader (Accept Type.MIME.Tif) where
 
 instance TypedHeader (Accept Type.MIME.Ts) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           (const $ "expected " <> MIME.toString (Type.MIME.value @Type.MIME.Ts))
@@ -1532,7 +1332,7 @@ instance TypedHeader (Accept Type.MIME.Ts) where
 
 instance TypedHeader (Accept Type.MIME.Ttf) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1544,7 +1344,7 @@ instance TypedHeader (Accept Type.MIME.Ttf) where
 
 instance TypedHeader (Accept Type.MIME.Txt) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1556,7 +1356,7 @@ instance TypedHeader (Accept Type.MIME.Txt) where
 
 instance TypedHeader (Accept Type.MIME.Vsd) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1568,7 +1368,7 @@ instance TypedHeader (Accept Type.MIME.Vsd) where
 
 instance TypedHeader (Accept Type.MIME.Wav) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1580,7 +1380,7 @@ instance TypedHeader (Accept Type.MIME.Wav) where
 
 instance TypedHeader (Accept Type.MIME.Weba) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1592,7 +1392,7 @@ instance TypedHeader (Accept Type.MIME.Weba) where
 
 instance TypedHeader (Accept Type.MIME.Webm) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1604,7 +1404,7 @@ instance TypedHeader (Accept Type.MIME.Webm) where
 
 instance TypedHeader (Accept Type.MIME.Webp) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1616,7 +1416,7 @@ instance TypedHeader (Accept Type.MIME.Webp) where
 
 instance TypedHeader (Accept Type.MIME.Woff) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1628,7 +1428,7 @@ instance TypedHeader (Accept Type.MIME.Woff) where
 
 instance TypedHeader (Accept Type.MIME.Woff2) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1640,7 +1440,7 @@ instance TypedHeader (Accept Type.MIME.Woff2) where
 
 instance TypedHeader (Accept Type.MIME.Xhtml) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1652,7 +1452,7 @@ instance TypedHeader (Accept Type.MIME.Xhtml) where
 
 instance TypedHeader (Accept Type.MIME.Xls) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1664,7 +1464,7 @@ instance TypedHeader (Accept Type.MIME.Xls) where
 
 instance TypedHeader (Accept Type.MIME.Xlsx) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1676,7 +1476,7 @@ instance TypedHeader (Accept Type.MIME.Xlsx) where
 
 instance TypedHeader (Accept Type.MIME.Xml) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1688,7 +1488,7 @@ instance TypedHeader (Accept Type.MIME.Xml) where
 
 instance TypedHeader (Accept Type.MIME.Xul) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1700,7 +1500,7 @@ instance TypedHeader (Accept Type.MIME.Xul) where
 
 instance TypedHeader (Accept Type.MIME.Zip) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1712,7 +1512,7 @@ instance TypedHeader (Accept Type.MIME.Zip) where
 
 instance TypedHeader (Accept Type.MIME.Video3gp) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1724,7 +1524,7 @@ instance TypedHeader (Accept Type.MIME.Video3gp) where
 
 instance TypedHeader (Accept Type.MIME.Video3g2) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1736,7 +1536,7 @@ instance TypedHeader (Accept Type.MIME.Video3g2) where
 
 instance TypedHeader (Accept Type.MIME.Archive7z) where
   headerName = "Accept"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1753,12 +1553,12 @@ instance TypedHeader (ContentType String) where
 
 instance TypedHeader (ContentType MIME.MIME) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser <#> ContentType
+  headerValueParser = Parse.mime <#> ContentType
   headerValueEncode = MIME.toString <<< unwrap
 
 instance TypedHeader (ContentType Type.MIME.Aac) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1770,7 +1570,7 @@ instance TypedHeader (ContentType Type.MIME.Aac) where
 
 instance TypedHeader (ContentType Type.MIME.Abw) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1782,7 +1582,7 @@ instance TypedHeader (ContentType Type.MIME.Abw) where
 
 instance TypedHeader (ContentType Type.MIME.Arc) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1794,7 +1594,7 @@ instance TypedHeader (ContentType Type.MIME.Arc) where
 
 instance TypedHeader (ContentType Type.MIME.Avif) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1806,7 +1606,7 @@ instance TypedHeader (ContentType Type.MIME.Avif) where
 
 instance TypedHeader (ContentType Type.MIME.Avi) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1818,7 +1618,7 @@ instance TypedHeader (ContentType Type.MIME.Avi) where
 
 instance TypedHeader (ContentType Type.MIME.Azw) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1830,7 +1630,7 @@ instance TypedHeader (ContentType Type.MIME.Azw) where
 
 instance TypedHeader (ContentType Type.MIME.Bin) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1842,7 +1642,7 @@ instance TypedHeader (ContentType Type.MIME.Bin) where
 
 instance TypedHeader (ContentType Type.MIME.Bmp) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1854,7 +1654,7 @@ instance TypedHeader (ContentType Type.MIME.Bmp) where
 
 instance TypedHeader (ContentType Type.MIME.Bz) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           (const $ "expected " <> MIME.toString (Type.MIME.value @Type.MIME.Bz))
@@ -1865,7 +1665,7 @@ instance TypedHeader (ContentType Type.MIME.Bz) where
 
 instance TypedHeader (ContentType Type.MIME.Bz2) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1877,7 +1677,7 @@ instance TypedHeader (ContentType Type.MIME.Bz2) where
 
 instance TypedHeader (ContentType Type.MIME.Cda) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1889,7 +1689,7 @@ instance TypedHeader (ContentType Type.MIME.Cda) where
 
 instance TypedHeader (ContentType Type.MIME.Csh) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1901,7 +1701,7 @@ instance TypedHeader (ContentType Type.MIME.Csh) where
 
 instance TypedHeader (ContentType Type.MIME.Css) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1913,7 +1713,7 @@ instance TypedHeader (ContentType Type.MIME.Css) where
 
 instance TypedHeader (ContentType Type.MIME.Csv) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1925,7 +1725,7 @@ instance TypedHeader (ContentType Type.MIME.Csv) where
 
 instance TypedHeader (ContentType Type.MIME.Doc) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1937,7 +1737,7 @@ instance TypedHeader (ContentType Type.MIME.Doc) where
 
 instance TypedHeader (ContentType Type.MIME.Docx) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1949,7 +1749,7 @@ instance TypedHeader (ContentType Type.MIME.Docx) where
 
 instance TypedHeader (ContentType Type.MIME.Eot) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1961,7 +1761,7 @@ instance TypedHeader (ContentType Type.MIME.Eot) where
 
 instance TypedHeader (ContentType Type.MIME.Epub) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1973,7 +1773,7 @@ instance TypedHeader (ContentType Type.MIME.Epub) where
 
 instance TypedHeader (ContentType Type.MIME.Gz) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           (const $ "expected " <> MIME.toString (Type.MIME.value @Type.MIME.Gz))
@@ -1984,7 +1784,7 @@ instance TypedHeader (ContentType Type.MIME.Gz) where
 
 instance TypedHeader (ContentType Type.MIME.Gif) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -1996,7 +1796,7 @@ instance TypedHeader (ContentType Type.MIME.Gif) where
 
 instance TypedHeader (ContentType Type.MIME.Html) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2008,7 +1808,7 @@ instance TypedHeader (ContentType Type.MIME.Html) where
 
 instance TypedHeader (ContentType Type.MIME.Ico) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2020,7 +1820,7 @@ instance TypedHeader (ContentType Type.MIME.Ico) where
 
 instance TypedHeader (ContentType Type.MIME.Ics) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2032,7 +1832,7 @@ instance TypedHeader (ContentType Type.MIME.Ics) where
 
 instance TypedHeader (ContentType Type.MIME.Jar) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2044,7 +1844,7 @@ instance TypedHeader (ContentType Type.MIME.Jar) where
 
 instance TypedHeader (ContentType Type.MIME.Jpeg) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2056,7 +1856,7 @@ instance TypedHeader (ContentType Type.MIME.Jpeg) where
 
 instance TypedHeader (ContentType Type.MIME.Js) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           (const $ "expected " <> MIME.toString (Type.MIME.value @Type.MIME.Js))
@@ -2067,7 +1867,7 @@ instance TypedHeader (ContentType Type.MIME.Js) where
 
 instance TypedHeader (ContentType Type.MIME.Json) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2079,7 +1879,7 @@ instance TypedHeader (ContentType Type.MIME.Json) where
 
 instance TypedHeader (ContentType Type.MIME.Jsonld) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2091,7 +1891,7 @@ instance TypedHeader (ContentType Type.MIME.Jsonld) where
 
 instance TypedHeader (ContentType Type.MIME.Midi) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2103,7 +1903,7 @@ instance TypedHeader (ContentType Type.MIME.Midi) where
 
 instance TypedHeader (ContentType Type.MIME.Mp3) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2115,7 +1915,7 @@ instance TypedHeader (ContentType Type.MIME.Mp3) where
 
 instance TypedHeader (ContentType Type.MIME.Mp4) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2127,7 +1927,7 @@ instance TypedHeader (ContentType Type.MIME.Mp4) where
 
 instance TypedHeader (ContentType Type.MIME.Mpeg) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2139,7 +1939,7 @@ instance TypedHeader (ContentType Type.MIME.Mpeg) where
 
 instance TypedHeader (ContentType Type.MIME.Mpkg) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2151,7 +1951,7 @@ instance TypedHeader (ContentType Type.MIME.Mpkg) where
 
 instance TypedHeader (ContentType Type.MIME.Odp) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2163,7 +1963,7 @@ instance TypedHeader (ContentType Type.MIME.Odp) where
 
 instance TypedHeader (ContentType Type.MIME.Ods) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2175,7 +1975,7 @@ instance TypedHeader (ContentType Type.MIME.Ods) where
 
 instance TypedHeader (ContentType Type.MIME.Odt) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2187,7 +1987,7 @@ instance TypedHeader (ContentType Type.MIME.Odt) where
 
 instance TypedHeader (ContentType Type.MIME.Oga) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2199,7 +1999,7 @@ instance TypedHeader (ContentType Type.MIME.Oga) where
 
 instance TypedHeader (ContentType Type.MIME.Ogv) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2211,7 +2011,7 @@ instance TypedHeader (ContentType Type.MIME.Ogv) where
 
 instance TypedHeader (ContentType Type.MIME.Ogx) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2223,7 +2023,7 @@ instance TypedHeader (ContentType Type.MIME.Ogx) where
 
 instance TypedHeader (ContentType Type.MIME.Opus) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2235,7 +2035,7 @@ instance TypedHeader (ContentType Type.MIME.Opus) where
 
 instance TypedHeader (ContentType Type.MIME.Otf) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2247,7 +2047,7 @@ instance TypedHeader (ContentType Type.MIME.Otf) where
 
 instance TypedHeader (ContentType Type.MIME.Png) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2259,7 +2059,7 @@ instance TypedHeader (ContentType Type.MIME.Png) where
 
 instance TypedHeader (ContentType Type.MIME.Pdf) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2271,7 +2071,7 @@ instance TypedHeader (ContentType Type.MIME.Pdf) where
 
 instance TypedHeader (ContentType Type.MIME.Php) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2283,7 +2083,7 @@ instance TypedHeader (ContentType Type.MIME.Php) where
 
 instance TypedHeader (ContentType Type.MIME.Ppt) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2295,7 +2095,7 @@ instance TypedHeader (ContentType Type.MIME.Ppt) where
 
 instance TypedHeader (ContentType Type.MIME.Pptx) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2307,7 +2107,7 @@ instance TypedHeader (ContentType Type.MIME.Pptx) where
 
 instance TypedHeader (ContentType Type.MIME.Rar) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2319,7 +2119,7 @@ instance TypedHeader (ContentType Type.MIME.Rar) where
 
 instance TypedHeader (ContentType Type.MIME.Rtf) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2331,7 +2131,7 @@ instance TypedHeader (ContentType Type.MIME.Rtf) where
 
 instance TypedHeader (ContentType Type.MIME.Sh) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           (const $ "expected " <> MIME.toString (Type.MIME.value @Type.MIME.Sh))
@@ -2342,7 +2142,7 @@ instance TypedHeader (ContentType Type.MIME.Sh) where
 
 instance TypedHeader (ContentType Type.MIME.Svg) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2354,7 +2154,7 @@ instance TypedHeader (ContentType Type.MIME.Svg) where
 
 instance TypedHeader (ContentType Type.MIME.Tar) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2366,7 +2166,7 @@ instance TypedHeader (ContentType Type.MIME.Tar) where
 
 instance TypedHeader (ContentType Type.MIME.Tif) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2378,7 +2178,7 @@ instance TypedHeader (ContentType Type.MIME.Tif) where
 
 instance TypedHeader (ContentType Type.MIME.Ts) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           (const $ "expected " <> MIME.toString (Type.MIME.value @Type.MIME.Ts))
@@ -2389,7 +2189,7 @@ instance TypedHeader (ContentType Type.MIME.Ts) where
 
 instance TypedHeader (ContentType Type.MIME.Ttf) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2401,7 +2201,7 @@ instance TypedHeader (ContentType Type.MIME.Ttf) where
 
 instance TypedHeader (ContentType Type.MIME.Txt) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2413,7 +2213,7 @@ instance TypedHeader (ContentType Type.MIME.Txt) where
 
 instance TypedHeader (ContentType Type.MIME.Vsd) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2425,7 +2225,7 @@ instance TypedHeader (ContentType Type.MIME.Vsd) where
 
 instance TypedHeader (ContentType Type.MIME.Wav) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2437,7 +2237,7 @@ instance TypedHeader (ContentType Type.MIME.Wav) where
 
 instance TypedHeader (ContentType Type.MIME.Weba) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2449,7 +2249,7 @@ instance TypedHeader (ContentType Type.MIME.Weba) where
 
 instance TypedHeader (ContentType Type.MIME.Webm) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2461,7 +2261,7 @@ instance TypedHeader (ContentType Type.MIME.Webm) where
 
 instance TypedHeader (ContentType Type.MIME.Webp) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2473,7 +2273,7 @@ instance TypedHeader (ContentType Type.MIME.Webp) where
 
 instance TypedHeader (ContentType Type.MIME.Woff) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2485,7 +2285,7 @@ instance TypedHeader (ContentType Type.MIME.Woff) where
 
 instance TypedHeader (ContentType Type.MIME.Woff2) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2497,7 +2297,7 @@ instance TypedHeader (ContentType Type.MIME.Woff2) where
 
 instance TypedHeader (ContentType Type.MIME.Xhtml) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2509,7 +2309,7 @@ instance TypedHeader (ContentType Type.MIME.Xhtml) where
 
 instance TypedHeader (ContentType Type.MIME.Xls) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2521,7 +2321,7 @@ instance TypedHeader (ContentType Type.MIME.Xls) where
 
 instance TypedHeader (ContentType Type.MIME.Xlsx) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2533,7 +2333,7 @@ instance TypedHeader (ContentType Type.MIME.Xlsx) where
 
 instance TypedHeader (ContentType Type.MIME.Xml) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2545,7 +2345,7 @@ instance TypedHeader (ContentType Type.MIME.Xml) where
 
 instance TypedHeader (ContentType Type.MIME.Xul) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2557,7 +2357,7 @@ instance TypedHeader (ContentType Type.MIME.Xul) where
 
 instance TypedHeader (ContentType Type.MIME.Zip) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2569,7 +2369,7 @@ instance TypedHeader (ContentType Type.MIME.Zip) where
 
 instance TypedHeader (ContentType Type.MIME.Video3gp) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2581,7 +2381,7 @@ instance TypedHeader (ContentType Type.MIME.Video3gp) where
 
 instance TypedHeader (ContentType Type.MIME.Video3g2) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2593,7 +2393,7 @@ instance TypedHeader (ContentType Type.MIME.Video3g2) where
 
 instance TypedHeader (ContentType Type.MIME.Archive7z) where
   headerName = "Content-Type"
-  headerValueParser = mimeParser
+  headerValueParser = Parse.mime
     >>=
       ( Parse.liftMaybe
           ( const $ "expected " <> MIME.toString
@@ -2612,7 +2412,8 @@ instance TypedHeader AccessControlAllowHeaders where
   headerName = "Access-Control-Allow-Headers"
   headerValueParser =
     let
-      headers = commas1 rules.token <#> map String.Lower.fromString <#> Right
+      headers = Parse.commas1 Parse.token <#> map String.Lower.fromString
+        <#> Right
         <#> AccessControlAllowHeaders
     in
       Parse.try (wildcardParser $> AccessControlAllowHeaders (Left Wildcard))
@@ -2626,7 +2427,8 @@ instance TypedHeader AccessControlAllowMethods where
   headerName = "Access-Control-Allow-Methods"
   headerValueParser =
     let
-      methods = commas1 methodParser <#> Right <#> AccessControlAllowMethods
+      methods = Parse.commas1 Parse.method <#> Right <#>
+        AccessControlAllowMethods
     in
       Parse.try (wildcardParser $> AccessControlAllowMethods (Left Wildcard))
         <|> Parse.try methods
@@ -2650,7 +2452,8 @@ instance TypedHeader AccessControlExposeHeaders where
   headerName = "Access-Control-Expose-Headers"
   headerValueParser =
     let
-      str = commas headerNameParser <#> Right <#> AccessControlExposeHeaders
+      str = Parse.commas Parse.headerName <#> Right <#>
+        AccessControlExposeHeaders
     in
       Parse.try (wildcardParser $> AccessControlExposeHeaders (Left Wildcard))
         <|> Parse.try str
@@ -2668,14 +2471,15 @@ instance TypedHeader AccessControlMaxAge where
 
 instance TypedHeader AccessControlRequestHeaders where
   headerName = "Access-Control-Request-Headers"
-  headerValueParser = commas1 headerNameParser <#> AccessControlRequestHeaders
+  headerValueParser = Parse.commas1 Parse.headerName <#>
+    AccessControlRequestHeaders
   headerValueEncode (AccessControlRequestHeaders hs) = hs
     <#> String.Lower.toString
     # Array.NonEmpty.intercalate ", "
 
 instance TypedHeader AccessControlRequestMethod where
   headerName = "Access-Control-Request-Method"
-  headerValueParser = methodParser <#> AccessControlRequestMethod
+  headerValueParser = Parse.method <#> AccessControlRequestMethod
   headerValueEncode (AccessControlRequestMethod m) = Method.toString m
 
 instance TypedHeader Age where
@@ -2686,7 +2490,7 @@ instance TypedHeader Age where
 
 instance TypedHeader Allow where
   headerName = "Allow"
-  headerValueParser = commas1 methodParser <#> Allow
+  headerValueParser = Parse.commas1 Parse.method <#> Allow
   headerValueEncode (Allow ms) = ms <#> Method.toString #
     Array.NonEmpty.intercalate ", "
 
@@ -2694,8 +2498,8 @@ instance TypedHeader Authorization where
   headerName = "Authorization"
   headerValueParser =
     pure (\scheme val -> Authorization scheme val)
-      <*> ((rules.token <#> AuthScheme) <* Parse.whiteSpace)
-      <*> (Parse.optionMaybe rules.token68 <#> fromMaybe "")
+      <*> ((Parse.token <#> AuthScheme) <* Parse.whiteSpace)
+      <*> (Parse.optionMaybe Parse.token68 <#> fromMaybe "")
   headerValueEncode (Authorization (AuthScheme s) v) = s <> " " <> v
 
 instance TypedHeader BasicAuth where
@@ -2727,7 +2531,7 @@ instance TypedHeader BearerAuth where
 instance TypedHeader CacheControl where
   headerName = "Cache-Control"
   headerValueParser = do
-    directives <- commas directiveParser <#> Map.fromFoldable
+    directives <- Parse.commas Parse.directive <#> Map.fromFoldable
     pure $ CacheControl
       { maxAge: Map.lookup "max-age" directives # join >>= Int.fromString
       , maxStale: Map.lookup "max-stale" directives # join >>= Int.fromString
@@ -2778,9 +2582,10 @@ instance TypedHeader Connection where
   headerName = "Connection"
   headerValueParser =
     let
-      close = closeRegexParser $> Connection (Left ConnectionClose)
+      close = Parse.closeRegex $> Connection (Left ConnectionClose)
     in
-      Parse.try close <|> (commas1 headerNameParser <#> Right <#> Connection)
+      Parse.try close <|>
+        (Parse.commas1 Parse.headerName <#> Right <#> Connection)
   headerValueEncode (Connection (Left ConnectionClose)) = "close"
   headerValueEncode (Connection (Right as)) = as <#> String.Lower.toString #
     Array.NonEmpty.intercalate ", "
@@ -2796,25 +2601,26 @@ instance TypedHeader ContentDisposition where
       attachment = do
         void $ Parse.whiteSpace *> Parse.string "attachment" *> boundary *>
           Parse.whiteSpace
-        directives <- semis directiveParser <#> Map.fromFoldable
+        directives <- Parse.semis Parse.directive <#> Map.fromFoldable
         let
           filename =
             ( Map.lookup "filename" directives <|> Map.lookup "filename*"
                 directives
             )
               # join
-              <#> Regex.replace quotesRe ""
+              <#> Regex.replace Parse.quotesRe ""
         pure $ ContentDisposition $ Either.Nested.in2 $
           ContentDispositionAttachment { filename }
       formData = do
         void $ Parse.whiteSpace *> Parse.string "form-data" *> boundary *>
           Parse.whiteSpace
-        directives <- semis directiveParser <#> Map.fromFoldable
+        directives <- Parse.semis Parse.directive <#> Map.fromFoldable
         let
           filename = Map.lookup "filename" directives # join <#> Regex.replace
-            quotesRe
+            Parse.quotesRe
             ""
-          name = Map.lookup "name" directives # join <#> Regex.replace quotesRe
+          name = Map.lookup "name" directives # join <#> Regex.replace
+            Parse.quotesRe
             ""
         pure $ ContentDisposition $ Either.Nested.in3 $
           ContentDispositionFormData { filename, name }
@@ -2839,7 +2645,7 @@ instance TypedHeader ContentDisposition where
 instance TypedHeader ContentEncoding where
   headerName = "Content-Encoding"
   headerValueParser =
-    commas1
+    Parse.commas1
       ( Parse.whiteSpace
           *>
             ( Parse.many Parse.alphaNum <#> Array.fromFoldable <#>
@@ -2919,27 +2725,12 @@ instance TypedHeader ContentRange where
 
 instance TypedHeader Cookie where
   headerName = "Cookie"
-  headerValueParser =
-    let
-      cookieName = rules.token
-      cookieValue =
-        ( Parse.try
-            (rules.dquote *> Parse.many rules.cookieChar <* rules.dquote) <|>
-            Parse.many rules.cookieChar
-        )
-          <#> fold
-      cookiePair = pure (\k v -> k /\ v) <*> (cookieName <* Parse.string "=")
-        <*> cookieValue
-    in
-      Parse.sepBy1 cookiePair (Parse.string "; ")
-        <#> Array.NonEmpty.fromFoldable1
-        <#> Cookie
-  headerValueEncode (Cookie as) = as <#> (\(k /\ v) -> k <> "=" <> v) #
-    Array.NonEmpty.intercalate "; "
+  headerValueParser = Cookie.parser <#> Cookie
+  headerValueEncode (Cookie as) = Cookie.toString as
 
 instance TypedHeader Date where
   headerName = "Date"
-  headerValueParser = datetimeParser <#> Date
+  headerValueParser = Parse.datetime <#> Date
   headerValueEncode (Date a) = printDateTime a
 
 instance TypedHeader ETag where
@@ -2954,7 +2745,7 @@ instance TypedHeader ExpectContinue where
 
 instance TypedHeader Expires where
   headerName = "Expires"
-  headerValueParser = datetimeParser <#> Expires
+  headerValueParser = Parse.datetime <#> Expires
   headerValueEncode (Expires a) = printDateTime a
 
 instance TypedHeader Host where
@@ -2973,7 +2764,7 @@ instance TypedHeader IfMatch where
           *> Parse.string "\""
           *> (Parse.anyTill (void $ Parse.string "\"") <#> fst)
           <* Parse.whiteSpace
-      etags = commas1 etag <#> Right <#> IfMatch
+      etags = Parse.commas1 etag <#> Right <#> IfMatch
     in
       Parse.try wild <|> Parse.try etags
   headerValueEncode (IfMatch (Left Wildcard)) = "*"
@@ -2998,7 +2789,7 @@ instance TypedHeader IfNoneMatch where
           *> Parse.string "W/"
           *> etag MatchETag
           <* Parse.whiteSpace
-      etags = commas1 (Parse.try weakEtag <|> strongEtag) <#> Right <#>
+      etags = Parse.commas1 (Parse.try weakEtag <|> strongEtag) <#> Right <#>
         IfNoneMatch
     in
       Parse.try wild <|> Parse.try etags
@@ -3014,14 +2805,14 @@ instance TypedHeader IfNoneMatch where
 
 instance TypedHeader IfModifiedSince where
   headerName = "If-Modified-Since"
-  headerValueParser = datetimeParser <#> IfModifiedSince
+  headerValueParser = Parse.datetime <#> IfModifiedSince
   headerValueEncode (IfModifiedSince a) = printDateTime a
 
 instance TypedHeader IfRange where
   headerName = "If-Modified-Since"
   headerValueParser =
     let
-      dt = datetimeParser <#> Left <#> IfRange
+      dt = Parse.datetime <#> Left <#> IfRange
       etag =
         Parse.whiteSpace
           *> Parse.string "\""
@@ -3037,12 +2828,12 @@ instance TypedHeader IfRange where
 
 instance TypedHeader IfUnmodifiedSince where
   headerName = "If-Unmodified-Since"
-  headerValueParser = datetimeParser <#> IfUnmodifiedSince
+  headerValueParser = Parse.datetime <#> IfUnmodifiedSince
   headerValueEncode (IfUnmodifiedSince a) = printDateTime a
 
 instance TypedHeader LastModified where
   headerName = "Last-Modified"
-  headerValueParser = datetimeParser <#> LastModified
+  headerValueParser = Parse.datetime <#> LastModified
   headerValueEncode (LastModified a) = printDateTime a
 
 instance TypedHeader Origin where
@@ -3078,7 +2869,7 @@ instance TypedHeader Range where
           <|> Parse.try (rangeSpecSuffix <#> Either.Nested.in3)
           <|> (rangeSpecStart <#> Either.Nested.in1)
     in
-      commas1 rangeSpec <#> Range
+      Parse.commas1 rangeSpec <#> Range
   headerValueEncode (Range as) =
     as
       <#>
@@ -3137,7 +2928,7 @@ instance TypedHeader ReferrerPolicy where
 
 instance TypedHeader RetryAfter where
   headerName = "Retry-After"
-  headerValueParser = Parse.try (datetimeParser <#> Left <#> RetryAfter) <|>
+  headerValueParser = Parse.try (Parse.datetime <#> Left <#> RetryAfter) <|>
     Parse.try (Parse.intDecimal <#> Right <#> RetryAfter)
   headerValueEncode (RetryAfter (Left a)) = printDateTime a
   headerValueEncode (RetryAfter (Right a)) = Int.toStringAs Int.decimal a
@@ -3154,7 +2945,7 @@ instance TypedHeader SecWebsocketAccept where
 
 instance TypedHeader SecWebsocketVersion where
   headerName = "Sec-WebSocket-Version"
-  headerValueParser = commas1 (Parse.intDecimal) <#> SecWebsocketVersion
+  headerValueParser = Parse.commas1 (Parse.intDecimal) <#> SecWebsocketVersion
   headerValueEncode (SecWebsocketVersion as) = as <#> Int.toStringAs Int.decimal
     # Array.NonEmpty.intercalate ", "
 
@@ -3171,7 +2962,7 @@ instance TypedHeader SetCookie where
 instance TypedHeader StrictTransportSecurity where
   headerName = "Strict-Transport-Security"
   headerValueParser = do
-    directives <- commas1 directiveParser <#> Map.fromFoldable
+    directives <- Parse.commas1 Parse.directive <#> Map.fromFoldable
     pure $ StrictTransportSecurity
       { maxAge: Map.lookup "max-age" directives # join >>= Int.fromString
       , includeSubdomains: Map.lookup "includesubdomains" directives # isJust
@@ -3201,7 +2992,8 @@ instance TypedHeader TransferEncoding where
 
 instance TypedHeader Upgrade where
   headerName = "Upgrade"
-  headerValueParser = commas1 (Parse.anyTill Parse.space <#> fst) <#> Upgrade
+  headerValueParser = Parse.commas1 (Parse.anyTill Parse.space <#> fst) <#>
+    Upgrade
   headerValueEncode (Upgrade as) = as # Array.NonEmpty.intercalate ", "
 
 instance TypedHeader UserAgent where
@@ -3212,7 +3004,7 @@ instance TypedHeader UserAgent where
 instance TypedHeader Vary where
   headerName = "Vary"
   headerValueParser = Parse.try (wildcardParser <#> Left <#> Vary) <|> Parse.try
-    (commas1 headerNameParser <#> Right <#> Vary)
+    (Parse.commas1 Parse.headerName <#> Right <#> Vary)
   headerValueEncode (Vary (Left _)) = "*"
   headerValueEncode (Vary (Right a)) = a <#> String.Lower.toString #
     Array.NonEmpty.intercalate ", "

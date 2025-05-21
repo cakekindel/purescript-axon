@@ -3,6 +3,7 @@ package:
   dependencies:
     - aff-promise
     - b64
+    - js-uri
     - parsing
     - unlift
     - aff: '>=8.0.0 <9.0.0'

@@ -34,20 +34,24 @@ import Axon.Header.Typed
   , ContentLocation(..)
   , ContentRange(..)
   , ContentType(..)
-  , Cookie(..)
+  , Cookie
   , Wildcard(..)
   , cacheControlDefaults
   , headerValueParser
   )
+import Axon.Header.Typed.Cookie as Cookie
 import Axon.Request.Method (Method(..))
 import Control.Monad.Error.Class (liftEither)
-import Data.Bifunctor (lmap)
-import Data.Either (Either(..), isLeft)
+import Data.Array as Array
+import Data.Bifunctor (bimap, lmap)
+import Data.Either (Either(..))
 import Data.Either.Nested as Either.Nested
 import Data.MIME as MIME
+import Data.Map as Map
 import Data.Maybe (Maybe(..))
+import Data.Newtype (unwrap)
 import Data.String.Lower as String.Lower
-import Data.Tuple.Nested ((/\))
+import Data.Tuple.Nested (type (/\), (/\))
 import Effect.Exception (error)
 import Parsing (parseErrorMessage, runParser)
 import Test.Spec (Spec, describe, it)
@@ -56,9 +60,27 @@ import Type.MIME as Type.MIME
 
 is :: forall h. Eq h => Show h => TypedHeader h => String -> h -> Spec Unit
 is i exp = it ("parses " <> show i) do
-  act <- runParser i (headerValueParser @h) # lmap (error <<< parseErrorMessage)
-    # liftEither
+  act <-
+    runParser i (headerValueParser @h)
+      # lmap (error <<< parseErrorMessage)
+      # liftEither
   act `shouldEqual` exp
+
+isCookie :: String -> Array (String /\ String) -> Spec Unit
+isCookie i kvs = it ("parses " <> show i) do
+  act <-
+    runParser i (headerValueParser @Cookie)
+      # lmap (error <<< parseErrorMessage)
+      # liftEither
+
+  let
+    actKvs =
+      ( map (bimap Cookie.keyToString Cookie.valueToString)
+          $ (Map.toUnfoldable :: _ (Array _))
+          $ unwrap act
+      )
+
+  Array.sort actKvs `shouldEqual` Array.sort kvs
 
 isnt :: forall h. Eq h => Show h => TypedHeader h => String -> h -> Spec Unit
 isnt i exp = it ("does not parse " <> show i) $
@@ -738,11 +760,61 @@ spec =
       "  bytes   */10   " `is`
         (ContentRange $ Either.Nested.in3 $ ByteRangeLength 10)
     describe "Cookie" do
-      "foo=" `is` Cookie (pure ("foo" /\ ""))
-      "foo=bar" `is` Cookie (pure ("foo" /\ "bar"))
-      "foo=bar; baz=" `is` Cookie (pure ("foo" /\ "bar") <> pure ("baz" /\ ""))
-      "foo=bar; baz=quux" `is` Cookie
-        (pure ("foo" /\ "bar") <> pure ("baz" /\ "quux"))
+      "foo=" `isCookie` [ "foo" /\ "" ]
+      "foo=bar" `isCookie` [ "foo" /\ "bar" ]
+      "foo=bar; baz=" `isCookie` [ "foo" /\ "bar", "baz" /\ "" ]
+      "foo=bar; baz=quux" `isCookie` [ "foo" /\ "bar", "baz" /\ "quux" ]
+
+      "FOO    = bar;   baz  =   raz"
+        `isCookie`
+          [ "FOO" /\ "bar"
+          , "baz" /\ "raz"
+          ]
+
+      "foo=; bar=" `isCookie` [ "bar" /\ "", "foo" /\ "" ]
+      "f=" `isCookie` [ "f" /\ "" ]
+      "f=;b=" `isCookie` [ "f" /\ "", "b" /\ "" ]
+
+      "foo=\"bar=123456789&name=Magic+Mouse\"" `isCookie`
+        [ "foo" /\ "bar=123456789&name=Magic+Mouse" ]
+      "email=%20%22%2c%3b%2f" `isCookie` [ "email" /\ " \",;/" ]
+      "  foo  =  \"bar\"  " `isCookie` [ "foo" /\ "bar" ]
+
+      "  foo  =  bar  ;  fizz  =  buzz  "
+        `isCookie`
+          [ "fizz" /\ "buzz"
+          , "foo" /\ "bar"
+          ]
+
+      " foo = \" a b c \" " `isCookie` [ "foo" /\ " a b c " ]
+      " = bar " `isCookie` [ "" /\ "bar" ]
+      " foo = " `isCookie` [ "foo" /\ "" ]
+      "   =   " `isCookie` [ "" /\ "" ]
+      "\tfoo\t=\tbar\t" `isCookie` [ "foo" /\ "bar" ]
+      "foo=%1;bar=bar" `isCookie` [ "foo" /\ "%1", "bar" /\ "bar" ]
+      "foo=bar;fizz  ;  buzz" `isCookie` [ "foo" /\ "bar" ]
+      "  fizz; foo=  bar" `isCookie` [ "foo" /\ "bar" ]
+
+      "foo=%1;bar=bar;foo=boo"
+        `isCookie`
+          [ "foo" /\ "%1"
+          , "bar" /\ "bar"
+          ]
+      "foo=false;bar=bar;foo=true"
+        `isCookie`
+          [ "foo" /\ "false"
+          , "bar" /\ "bar"
+          ]
+      "foo=;bar=bar;foo=boo"
+        `isCookie`
+          [ "foo" /\ ""
+          , "bar" /\ "bar"
+          ]
+      "toString=foo;valueOf=bar"
+        `isCookie`
+          [ "toString" /\ "foo"
+          , "valueOf" /\ "bar"
+          ]
     describe "Date" $ pure unit
     describe "ETag" $ pure unit
     describe "ExpectContinue" $ pure unit
