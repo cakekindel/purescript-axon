@@ -23,16 +23,14 @@ import Data.Bifunctor (lmap)
 import Data.Either (Either(..))
 import Data.Map as Map
 import Data.Maybe (fromJust)
-import Data.Net.SocketAddress as SocketAddress
+import Data.Net.SocketAddress (SocketAddress(..)) as SocketAddress
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.URL as URL
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Effect.Exception (error)
-import Effect.Unsafe (unsafePerformEffect)
 import Node.Buffer as Buffer
 import Node.Encoding (Encoding(..))
-import Node.Net.SocketAddress as SocketAddress
 import Node.Stream as Stream
 import Partial.Unsafe (unsafePartial)
 import Test.Spec (Spec, describe, it)

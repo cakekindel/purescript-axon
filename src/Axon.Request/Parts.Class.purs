@@ -14,7 +14,6 @@ module Axon.Request.Parts.Class
 import Prelude
 
 import Axon.Header.Typed (class TypedHeader, headerName, headerValueParser)
-import Axon.Header.Typed as Header.Typed
 import Axon.Request (Request)
 import Axon.Request as Request
 import Axon.Request.Method (Method)

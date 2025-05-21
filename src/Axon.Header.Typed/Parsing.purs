@@ -11,11 +11,9 @@ import Data.Array.NonEmpty as Array.NonEmpty
 import Data.Date as Date
 import Data.Date.Component (Month(..), Weekday(..))
 import Data.DateTime (DateTime(..))
-import Data.DateTime as DateTime
 import Data.Either (Either(..))
-import Data.Enum (fromEnum, toEnum)
+import Data.Enum (toEnum)
 import Data.Foldable (fold)
-import Data.Int as Int
 import Data.MIME as MIME
 import Data.Maybe (Maybe)
 import Data.String.Lower (StringLower)

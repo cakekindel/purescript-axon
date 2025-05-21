@@ -73,10 +73,10 @@ parser =
     pairs = P.C.sepBy (ws *> pair) (P.S.string ";")
     pair = hush <$> try
       ( pure (/\) <*> (ws *> name) <*>
-          (ws *> P.S.string "=" *> ws *> value <* ws)
+          (ws *> P.S.string "=" *> ws *> value' <* ws)
       )
     name = (P.C.option "" Parse.token) <#> Key
-    value = (valueQuoted <|> valueUnquoted) <#> Value
+    value' = (valueQuoted <|> valueUnquoted) <#> Value
     valueUnquoted = P.C.many Parse.cookieChar <#> fold
     valueQuoted = do
       s <- Parse.quoted
