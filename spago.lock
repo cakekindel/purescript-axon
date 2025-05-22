@@ -69,6 +69,9 @@
               "maybe": ">=6.0.0 <7.0.0"
             },
             {
+              "mimetype": ">=0.0.0 <1.0.0"
+            },
+            {
               "newtype": ">=5.0.0 <6.0.0"
             },
             {
@@ -169,6 +172,7 @@
             "lazy",
             "lists",
             "maybe",
+            "mimetype",
             "monad-control",
             "newtype",
             "node-buffer",
@@ -835,7 +839,9 @@
         "zipperarray": "2.0.0"
       }
     },
-    "extra_packages": {}
+    "extra_packages": {
+      "mimetype": "0.0.1"
+    }
   },
   "packages": {
     "aff": {
@@ -1410,6 +1416,15 @@
         "control",
         "invariant",
         "newtype",
+        "prelude"
+      ]
+    },
+    "mimetype": {
+      "type": "registry",
+      "version": "0.0.1",
+      "integrity": "sha256-et6hgaZcQbScILZKjhIJyZS0fbz8E6XpbXnc/NxPf5s=",
+      "dependencies": [
+        "maybe",
         "prelude"
       ]
     },
